@@ -1,6 +1,8 @@
 # 0007: Releases are semver tags; products pin a range
 
-- **Status:** accepted
+- **Status:** accepted; the per-PR bump is amended by
+  [0011](./0011-release-from-change-notes.md), which moves it into the release
+  workflow
 - **Date:** 2026-10-12
 
 ## Context

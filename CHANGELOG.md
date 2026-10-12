@@ -1,7 +1,9 @@
 # Changelog
 
-Releases are git tags (`v<version>`), cut by the release workflow when main's
-`package.json` version has no tag yet. Products pin a range on them
+Releases are git tags (`v<version>`). The release workflow writes each entry
+here from the change notes under `changes/` and tags main
+([decision 0011](./docs/contributing/decisions/0011-release-from-change-notes.md));
+products pin a range on the tags
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
 ## [0.4.2] - 2026-10-12
