@@ -9,6 +9,14 @@ npm run validate     # the single gate; read-only
 npm run validate:fix # apply formatter and lint autofixes
 ```
 
+## Updating the harness
+
+The harness is the `@dom-kelly/reins` devDependency, pinned to a semver range on
+its release tags. `npm update @dom-kelly/reins && npx reins sync` takes a
+release within that range and merges the template changes into this repo's
+managed files; `npx reins doctor` says when a sync is due. A new minor is taken
+by editing the range in `package.json`.
+
 ## Agents
 
 An agent setting up the repo does everything it can itself (install, dev,

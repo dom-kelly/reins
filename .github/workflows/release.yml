@@ -1,0 +1,40 @@
+name: Release
+
+# Tags main with package.json's version when that tag does not exist yet.
+# The bump check (reins.json → checks.bumpVersionWhen) makes sure a change to
+# shipped code arrives with a new version, so every merge is either a release
+# or a no-op here. Products pin `#semver:` ranges against these tags.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# One tagging run at a time, in order: a second push waits rather than racing
+# the first to the same tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag v<version> unless it exists
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "::notice::$tag already exists; nothing to release"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "reins $version"
+          git push origin "refs/tags/$tag"
+          echo "::notice::tagged $tag at $GITHUB_SHA"

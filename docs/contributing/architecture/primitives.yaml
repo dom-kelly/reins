@@ -94,3 +94,15 @@ primitives:
       - scaffold
     docs:
       - docs/contributing/developing.md
+
+  - id: release
+    group: content
+    name: Releases
+    summary:
+      The changelog and the workflow that tags main with package.json's version.
+    floor: medium
+    code:
+      - CHANGELOG.md
+      - .github/workflows/release.yml
+    docs:
+      - docs/contributing/decisions/0007-versioned-by-tag.md

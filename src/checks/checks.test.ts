@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -215,6 +216,69 @@ test('repo rules: one lockfile and a short AGENTS.md', async () => {
 			checks: { lockfile: 'pnpm', agentsMaxLines: 30 },
 		})
 		expect(relaxed.issues).toEqual([])
+	} finally {
+		await rm(root, { recursive: true, force: true })
+	}
+})
+
+/** A repo whose origin/main is its first commit, so `git diff origin/main`
+ *  sees the working tree's edits. */
+async function repoWithMain(root: string, files: Record<string, string>) {
+	const git = (...args: Array<string>) =>
+		execFileSync('git', args, { cwd: root, stdio: 'ignore' })
+	git('init', '-q', '-b', 'main')
+	for (const [name, content] of Object.entries(files)) {
+		await mkdir(path.dirname(path.join(root, name)), { recursive: true })
+		await writeFile(path.join(root, name), content)
+	}
+	git('add', '.')
+	git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'base')
+	git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+}
+
+test('repo rules: shipped changes need a version bump and a changelog entry', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'harness-bump-'))
+	try {
+		await repoWithMain(root, {
+			'package.json': '{ "version": "0.1.0" }\n',
+			'CHANGELOG.md': '# Changelog\n\n## [0.1.0]\n\n- first\n',
+			'src/a.ts': 'export const a = 1\n',
+			'docs/a.md': 'docs\n',
+		})
+		const config = {
+			harness: '0',
+			product: { name: 'x' },
+			checks: { bumpVersionWhen: ['src/', 'package.json'] },
+		}
+		const messages = () =>
+			checkRepoRules(root, config).issues.map((i) => `${i.file}: ${i.message}`)
+		// A rule that is not configured never looks at git.
+		expect(
+			checkRepoRules(root, { harness: '0', product: { name: 'x' } }).issues,
+		).toEqual([])
+		expect(messages()).toEqual([])
+		await writeFile(path.join(root, 'docs/a.md'), 'docs changed\n')
+		expect(messages()).toEqual([])
+		await writeFile(path.join(root, 'src/a.ts'), 'export const a = 2\n')
+		expect(messages()).toEqual([
+			expect.stringMatching(
+				/^package\.json: 1 shipped file\(s\) changed since origin\/main \(src\/a\.ts\) but version is still 0\.1\.0; bump it/,
+			),
+		])
+		await writeFile(path.join(root, 'package.json'), '{ "version": "0.2.0" }\n')
+		expect(messages()).toEqual([
+			expect.stringMatching(/^CHANGELOG\.md: .*no `## \[0\.2\.0\]` heading/),
+		])
+		await writeFile(
+			path.join(root, 'CHANGELOG.md'),
+			'# Changelog\n\n## [0.2.0] - 2026-10-12\n\n- more\n\n## [0.1.0]\n\n- first\n',
+		)
+		expect(messages()).toEqual([])
+		// No origin/main (a fresh repo): nothing to compare, so no issue.
+		execFileSync('git', ['update-ref', '-d', 'refs/remotes/origin/main'], {
+			cwd: root,
+		})
+		expect(messages()).toEqual([])
 	} finally {
 		await rm(root, { recursive: true, force: true })
 	}

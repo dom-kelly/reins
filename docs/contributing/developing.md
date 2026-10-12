@@ -51,6 +51,23 @@ scaffolds a product, installs the tarball into it and runs the product's own
 `validate`; it is the only check that exercises the package as installed,
 because `npm link` resolves outside `node_modules` and hides the restriction.
 
+## Releasing
+
+A release is a tag; products pin a range on tags
+([decision 0007](./decisions/0007-versioned-by-tag.md)).
+
+1. In the PR that changes shipped code (`src/`, `bin/`, `templates/`,
+   `scaffold/`, `scripts/`, `package.json`), bump `version` in `package.json`
+   (`npm version patch|minor --no-git-tag-version`) and add a `## [<version>]`
+   entry to `CHANGELOG.md`. The repo rules check in `npm run validate` fails
+   without both; a change to `package-lock.json` alone needs neither.
+2. On merge, `.github/workflows/release.yml` tags main `v<version>` when no such
+   tag exists.
+3. Products depend on `git+https://github.com/dom-kelly/reins.git#semver:^0.2.0`
+   and take a release with `npm update @dom-kelly/reins && npx reins sync`. A
+   new minor is taken by editing the spec; `reins adopt` writes the current
+   major.minor and a test keeps `scaffold/app-node/package.json` on it.
+
 ## Trying it against a real product
 
 ```bash

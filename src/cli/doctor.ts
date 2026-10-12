@@ -36,11 +36,14 @@ export function doctor(root: string): Array<Item> {
 			fix: 'npm install',
 		},
 		{
+			// The harness repo does not sync from itself, so its own field is not compared.
 			label: config
-				? `reins.json present (synced from ${config.harness}; this CLI is ${packageVersion})`
+				? `reins.json synced from ${config.harness} (this CLI is ${packageVersion})`
 				: 'reins.json present',
-			ok: config !== undefined,
-			fix: 'npx reins adopt',
+			ok:
+				config !== undefined &&
+				(root === packageRoot || config.harness === packageVersion),
+			fix: config ? 'npx reins sync' : 'npx reins adopt',
 		},
 		{
 			label: 'git hooks installed',
