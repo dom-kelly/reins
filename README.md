@@ -33,6 +33,40 @@ loads the skills as a Claude Code plugin straight from `node_modules`, so a
 product never holds a copy of them
 ([decision 0009](./docs/contributing/decisions/0009-skills-ship-as-a-plugin.md)).
 
+### Or hand it to an agent
+
+Create the repository on GitHub, clone it, open your coding agent in the clone
+and paste this. The agent scaffolds, installs, proves the gate and the app,
+commits, and then hands you the few steps only you can do.
+
+```text
+Set this repository up on the reins harness (https://github.com/dom-kelly/reins)
+and get it running. Do everything you can yourself; stop only for what needs me,
+and give me the exact command for each of those.
+
+1. Node. This needs Node 22.18 or later. Check `node -v`; if it is older, run
+   `nvm install 22 && nvm use 22` (or tell me to).
+2. Scaffold. `reins new` refuses a non-empty directory and this one has `.git`
+   (and maybe README.md, LICENSE, .gitignore from GitHub), so scaffold next to it
+   and move the result in:
+     npx github:dom-kelly/reins new ../reins-scaffold --name <this directory's name, lowercase> --no-git --no-install
+   Move everything from ../reins-scaffold into this repo, dotfiles included, then
+   delete ../reins-scaffold. Where a file already exists here, keep mine; for
+   .gitignore, append the scaffold's entries to mine.
+3. Install and prove it. `npm install` (it also installs the git hooks and builds
+   the harness). `npm run validate` must be green; fix the cause of anything red,
+   never skip a check. Start `npm run dev`, confirm `curl localhost:3000/health`
+   returns ok:true with the git sha, then stop it.
+4. `npx reins doctor`. Fix whatever it flags that you can.
+5. Commit everything on main as one commit, "Scaffold with reins". Never pass
+   --no-verify; a failing hook means something to fix.
+6. Do not push: the harness refuses an agent pushing to main. Finish by telling
+   me to run `git push -u origin main`, then to open Claude Code here, accept the
+   plugin trust dialog so /reins:* appears, and run /reins:new-product with my
+   product idea. Add anything else that needs me (for example `gh auth login`,
+   `gh repo edit --delete-branch-on-merge`).
+```
+
 ## What a product gets
 
 | Layer        | Where in the product                                   | Purpose                                                                                                                                                                |
