@@ -8,8 +8,10 @@ reporting for outsiders is in [SECURITY.md](../../SECURITY.md).
 
 Each entry references an invariant id in
 [primitives.yaml](./architecture/primitives.yaml). A PR touching one says so in
-its description and declares at least `extends` (medium); the policy itself only
-reads the primitive's `floor`, so set `floor: medium` there to enforce it.
+its description and declares at least `extends` (medium). The policy takes the
+highest of the declared Change, the primitive's `floor` and the Door, but it
+cannot see that an invariant was touched, so set `floor: medium` on the
+primitive to enforce it whatever the PR declares.
 
 | Invariant id         | Why it matters                                  |
 | -------------------- | ----------------------------------------------- |

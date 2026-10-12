@@ -1,7 +1,8 @@
 # Getting started
 
-Requires Node 22, 22.18 or later (`.nvmrc` pins the major; the git hooks and
-`reins doctor` refuse another). TypeScript runs natively, no build step.
+Requires Node 22, 22.18 or later (`.nvmrc` pins the major; the git hooks refuse
+another, and `reins doctor` reports it). TypeScript runs natively, no build
+step.
 
 ```bash
 npm install          # also installs git hooks via husky

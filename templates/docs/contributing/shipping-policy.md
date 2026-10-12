@@ -137,11 +137,15 @@ enforcement ladder in [harness-engineering.md](./harness-engineering.md).
 	"independentReview": true,
 	"publish": true,
 	"owner": "your-login",
-	"ownerFindings": true,
 	"reviewers": {
 		"gate": [{ "check": "Cursor Bugbot", "login": "cursor" }],
 		"required": ["coderabbitai", "devin-ai-integration"],
-		"findingsFrom": ["cursor", "coderabbitai", "your-login"],
+		"findingsFrom": [
+			"cursor",
+			"coderabbitai",
+			"devin-ai-integration",
+			"your-login"
+		],
 		"ignoreChecks": ["CodeRabbit"]
 	}
 },

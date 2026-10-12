@@ -69,12 +69,12 @@ Rule of thumb: if a reviewer makes the same comment twice, encode it.
 | `npx reins check`      | Decision record numbers, broken doc links, skill frontmatter, the primitives map, repo rules |
 | `audit:prod`           | Production dependency vulnerabilities (moderate and above)                                   |
 
-The repo rules lane reads `reins.json` → `checks`: `lockfile` (the one package
-manager, default `npm`; other lockfiles are refused), `agentsMaxLines` (default
-20), `appendOnly` (paths whose committed files are only ever added, such as
-migrations), `bumpVersionWhen` (path prefixes whose change needs a version bump
-and a `CHANGELOG.md` entry) and `ignoreLinksIn` (path prefixes the link check
-skips).
+`reins check` reads `reins.json` → `checks`. The repo rules use `lockfile` (the
+one package manager, default `npm`; other lockfiles are refused),
+`agentsMaxLines` (default 20), `appendOnly` (paths whose committed files are
+only ever added, such as migrations) and `bumpVersionWhen` (path prefixes whose
+change needs a version bump and a `CHANGELOG.md` entry). The link check, which
+also runs on docs-only commits, uses `ignoreLinksIn` (path prefixes it skips).
 
 Add a product-specific checker as a script with a test, wired into `validate`;
 the shared ones come from the harness. Candidates that have not yet earned a
