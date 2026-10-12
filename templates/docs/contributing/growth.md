@@ -5,9 +5,12 @@ Pieces of a full kody-style harness that this template leaves out on purpose
 Each has a trigger. When the trigger fires, add the piece in a PR that names it;
 until then, do not add it because it looks useful.
 
-Implementations exist in this repo's history (commit `b313ef2`) and in
-[kentcdodds/kody](https://github.com/kentcdodds/kody); write your own version
-rather than copying kody's (its licence is unstated).
+Implementations exist in the harness's own history
+([dom-kelly/reins](https://github.com/dom-kelly/reins), commit `b313ef2`) and in
+[kentcdodds/kody](https://github.com/kentcdodds/kody). kody is licensed
+FSL-1.1-ALv2 (Functional Source License; Apache 2.0 two years after each
+release), which permits non-competing use. Write your own version rather than
+copying kody's wholesale.
 
 | Piece                                                            | Add when                                                                                                     |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |

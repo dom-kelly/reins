@@ -12,7 +12,7 @@ node bin/reins.ts --help
 
 | Path                 | What                                                                         |
 | -------------------- | ---------------------------------------------------------------------------- |
-| `bin/reins.ts`       | CLI entry: new, adopt, sync, check, classify, doctor, hook                   |
+| `bin/reins.ts`       | CLI entry: new, adopt, sync, check, classify, policy, doctor, hook           |
 | `src/checks/`        | Checkers behind `reins check` and the git hooks                              |
 | `src/hooks/`         | The Bash guard, the typecheck and gate-on-stop hooks, the git hook runner    |
 | `src/policy/`        | `reins policy`: risk tiers, reviewers, authority; tested against a stub `gh` |
@@ -27,6 +27,14 @@ harness uses the same skills it ships. A test fails if the copies drift, so edit
 the template and copy it over (a symlink breaks git stash and npm pack). Their
 links point at product docs, so `reins.json` lists them under
 `checks.ignoreLinksIn`.
+
+The harness does not adopt itself through `reins sync`. Decision
+[0004](./decisions/0004-harness-is-a-cli-package.md) keeps this repo's
+`docs/contributing/` (about developing the harness) distinct from the
+product-facing docs under `templates/`; a full self-adopt would overwrite one
+with the other. The copied skills and workflow, each with an equality test, are
+the deliberate compromise: the harness runs the files it ships without becoming
+a product of itself.
 
 ## Changing a template
 

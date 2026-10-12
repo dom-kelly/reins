@@ -4,6 +4,19 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.2.4] - 2026-10-12
+
+- The product-facing docs say what the guard does now: the "Agent guardrails"
+  bullets in `harness-engineering.md` list what it refuses (force-push, push to
+  main, `--no-verify`, destructive resets, `--admin`/`--auto` and API merges, a
+  merge without `--delete-branch`) and that it runs the shipping policy on
+  `gh pr merge`, instead of claiming pushes and merges always ask the owner.
+  `growth.md` states kody's licence (FSL-1.1-ALv2) and points at the harness
+  repo for the earlier implementations; the decisions index names
+  `npx reins check`. A test keeps retired wording (`npx harness`,
+  `harness.json`, "always ask the owner", …) out of every markdown file under
+  `templates/`, `docs/` and the README.
+
 ## [0.2.3] - 2026-10-12
 
 - The Stop hook has its own gate: `hooks.stopGate` in `reins.json` names the npm
