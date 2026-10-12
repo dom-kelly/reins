@@ -1,10 +1,11 @@
 # Developing the harness
 
-Requires Node 22.18 or later (`nvm use` reads `.nvmrc`).
+Requires Node 22, 22.18 or later: `.nvmrc` pins the major and the git hooks
+refuse another (`nvm use` reads it).
 
 ```bash
 npm install
-npm run validate          # the one gate: format, lint, types, tests, the CLI's own checks
+npm run validate          # the one gate: format, lint, types, tests, reins check, the e2e lanes, audit
 node bin/reins.ts --help
 ```
 

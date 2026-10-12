@@ -1,7 +1,7 @@
 ---
 name: new-product
 description: >
-  Bootstrap a new product on this boilerplate: interview the owner, fill
+  Bootstrap a new product on the reins harness: interview the owner, fill
   project-intent, reshape the primitives map, record the first decisions, choose
   the stack, and plan the first vertical slices. Use when the user says "new
   product", "start an app", "I want to build X", or the project-intent doc is

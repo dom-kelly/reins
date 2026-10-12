@@ -11,7 +11,7 @@ admin).
 
 | Service           | Purpose                            | Connection                    | Secrets / config                                        | Owner | Recovery  |
 | ----------------- | ---------------------------------- | ----------------------------- | ------------------------------------------------------- | ----- | --------- |
-| GitHub            | Source, PRs, Actions CI, issues    | Repo                          | Branch protection requires the Validate check           | _you_ | _fill in_ |
+| GitHub            | Source, PRs, Actions CI, issues    | Repo                          | Branch protection requires the `validate` check         | _you_ | _fill in_ |
 | CodeRabbit        | Optional AI review comments        | GitHub App on the repo        | none                                                    | _you_ | _fill in_ |
 | Cursor Bugbot     | AI review on PRs (primary)         | Cursor GitHub App on the repo | Cursor account linked to the PR author's GitHub account | _you_ | _fill in_ |
 | Hosting           | _fill in when the stack is chosen_ |                               |                                                         |       |           |
@@ -30,4 +30,5 @@ merge policy refuses rather than waits for it
 
 1. Enable Cursor Bugbot for the repository in the Cursor dashboard.
 2. Optionally install the CodeRabbit GitHub App on the repository.
-3. Protect `main`: require the Validate check, require PRs.
+3. Protect `main`: require the `validate` check (the job in `validate.yml`, and
+   what `policy.ciCheck` defaults to), require PRs.

@@ -19,13 +19,14 @@ unreviewed release.
 A release is a git tag `v<version>` on main, created by the release workflow
 when `package.json`'s version has no tag yet. The repo rules check
 (`checks.bumpVersionWhen`) refuses a change to shipped code (`src/`, `bin/`,
-`templates/`, `scaffold/`, `scripts/`, `package.json`) unless the version is
-bumped and `CHANGELOG.md` has a `## [<version>]` entry, so the bump and the note
-arrive in the PR that needs them and every merge is either a release or leaves
-the version alone.
+`templates/`, `scaffold/`, `plugin/`, `.claude-plugin/`, `scripts/`,
+`package.json`) unless the version is bumped and `CHANGELOG.md` has a
+`## [<version>]` entry, so the bump and the note arrive in the PR that needs
+them and every merge is either a release or leaves the version alone.
 
-Products depend on `git+https://github.com/dom-kelly/reins.git#semver:^0.2.0`:
-npm resolves the range against the tags, so `npm update @dom-kelly/reins` moves
+Products depend on
+`git+https://github.com/dom-kelly/reins.git#semver:^<major.minor>.0`: npm
+resolves the range against the tags, so `npm update @dom-kelly/reins` moves
 within the major.minor and a new minor is taken on purpose by editing the spec.
 `reins adopt` writes the current major.minor; `reins sync` rewrites a bare URL
 to it and records the version it synced from in `reins.json`, which

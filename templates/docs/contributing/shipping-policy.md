@@ -41,9 +41,11 @@ it valid; a sha that is not on the branch is refused). `owner` tiers are
 unaffected. `policy.independentReview: false` switches it off.
 
 Always: a PR of this repo (a PR URL from another repo is refused: run the policy
-and the merge from that repo), not a draft, targets `main`, no test file
-deleted, no other check red or pending (except `reviewers.ignoreChecks`).
-`gh pr merge --admin|--auto` and merging through the API are refused outright.
+and the merge from that repo), not a draft, targets `main`, a body with exactly
+one `**Door:**` and one `**Change:**` line as the PR template has them (the
+`Cleanup:` line is for the reader), no test file deleted, no other check red or
+pending (except `reviewers.ignoreChecks`). `gh pr merge --admin|--auto` and
+merging through the API are refused outright.
 
 ## Waiting for the verdict
 
@@ -131,13 +133,19 @@ enforcement ladder in [harness-engineering.md](./harness-engineering.md).
 	"gate": "validate",
 	"ciCheck": "validate",
 	"authority": { "low": "agent", "medium": "agent", "high": "owner" },
+	"enforceOnMerge": true,
 	"independentReview": true,
 	"publish": true,
 	"owner": "your-login",
-	"ownerFindings": true,
 	"reviewers": {
 		"gate": [{ "check": "Cursor Bugbot", "login": "cursor" }],
 		"required": ["coderabbitai", "devin-ai-integration"],
+		"findingsFrom": [
+			"cursor",
+			"coderabbitai",
+			"devin-ai-integration",
+			"your-login"
+		],
 		"ignoreChecks": ["CodeRabbit"]
 	}
 },
@@ -148,14 +156,17 @@ enforcement ladder in [harness-engineering.md](./harness-engineering.md).
 }
 ```
 
-`hooks.stopGate` is what the Claude Code Stop hook runs; it defaults to
-`policy.gate` and should finish in about a minute. `hooks.typecheck` is what the
-typecheck hook runs after a TypeScript edit (default `typecheck`), and
-`hooks.typecheckIgnore` lists path prefixes it leaves alone
-([harness-engineering.md](./harness-engineering.md), agent guardrails).
+`enforceOnMerge: false` stops the guard running the policy on `gh pr merge` (the
+command `npx reins policy` still does). `hooks.stopGate` is what the Claude Code
+Stop hook runs; it defaults to `policy.gate` and should finish in about a
+minute. `hooks.typecheck` is what the typecheck hook runs after a TypeScript
+edit (default `typecheck`), and `hooks.typecheckIgnore` lists path prefixes it
+leaves alone ([harness-engineering.md](./harness-engineering.md), agent
+guardrails).
 
-With no `reviewers`, medium and high need only the gate; add reviewers as the
-GitHub Apps are installed ([external-services.md](./external-services.md)).
+With no `reviewers`, medium and high need only the gate plus, when an agent
+merges, the independent review comment; add reviewers as the GitHub Apps are
+installed ([external-services.md](./external-services.md)).
 
 Every reviewer named in `reviewers` must actually be installed on the repo: the
 list is declared, never discovered. `npx reins doctor` reports any gate check,

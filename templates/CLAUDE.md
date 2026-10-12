@@ -42,5 +42,6 @@ Workflows come from the reins plugin, which `.claude/settings.json` loads from
   evidence.
 
 The harness owns these: do not copy or edit them here (`npx reins check` refuses
-a `.claude/skills/<name>` that reuses one of their names). A workflow this
-product needs that the harness lacks is a new skill under a different name.
+a `.claude/skills/<name>` or `.agents/skills/<name>` that reuses one of their
+names). A workflow this product needs that the harness lacks is a new skill
+under a different name.

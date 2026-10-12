@@ -1,6 +1,6 @@
 {
 	"name": "reins",
-	"version": "0.4.0",
+	"version": "0.4.1",
 	"description": "The reins harness workflows: new-product, review-and-recommend, ship-pr, verify-app",
 	"author": { "name": "dom-kelly" }
 }

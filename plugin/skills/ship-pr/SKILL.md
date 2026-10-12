@@ -42,8 +42,10 @@ owner, stop with everything ready, say which rule applied, and link the PR.
    `gh api -X PATCH repos/{owner}/{repo}/issues/comments/<id> -F body=@<file>`.
 5. **Verify (user-visible changes).** Use `/reins:verify-app` with realistic
    data and record the evidence.
-6. **Describe.** Fill the PR template: Intent, Why, Summary, Testing (commands
-   and results).
+6. **Describe.** Fill the PR template: Intent with exactly one `Door`, one
+   `Change` and one `Cleanup` line (the policy refuses a PR without the first
+   two), Why, Summary, Primitives (the `npx reins classify` output), Testing
+   (commands and results).
 7. **Leftovers.** Remove transitional code now. If something must wait for a
    later gate, say so in the PR under a `Cleanup:` line with a falsifiable
    "ready when"; a `TODO` in code is not a tracker.

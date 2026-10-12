@@ -4,6 +4,24 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.4.1] - 2026-10-12
+
+- Docs brought back in line with the code. Product docs: the shipping policy
+  names the `**Door:**` and `**Change:**` lines it reads and says the
+  independent review is needed with or without reviewers; `enforceOnMerge` and
+  `findingsFrom` join the configuration example; the `checks` keys are
+  documented (`lockfile`, `agentsMaxLines`, `appendOnly`, `bumpVersionWhen` for
+  the repo rules; `ignoreLinksIn` for the link check); an invariant touched
+  declares `extends` rather than "counts as medium" (the policy takes the
+  highest of the declared Change, the floor and the Door, and cannot see the
+  invariant itself); the required Node is 22 (22.18+), not "22.18 or later"; the
+  CI check to require is `validate`, lowercase; git hooks format staged files
+  only when a lint-staged config exists. Skills: `ship-pr` fills the Door /
+  Change / Cleanup and Primitives sections of the PR template; `new-product` no
+  longer says "boilerplate". Harness docs: the README is titled reins and its
+  hooks row says what the git hooks run; decision 0007 lists `plugin/` and
+  `.claude-plugin/` among the shipped paths.
+
 ## [0.4.0] - 2026-10-12
 
 - The policy writes the PR's status
