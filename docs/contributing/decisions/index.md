@@ -13,6 +13,7 @@ template.
 - [0005 — Merge authority is per repo; the harness lets agents merge every tier](./0005-authority-per-repo.md)
 - [0006 — The package and CLI are called reins; the harness stays the concept](./0006-named-reins.md)
 - [0007 — Releases are semver tags; products pin a range](./0007-versioned-by-tag.md)
+- [0008 — The harness owns the format and lint toolchain; the product keeps the rest](./0008-harness-owns-format-and-lint.md)
 
 ## Historical
 

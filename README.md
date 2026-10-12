@@ -31,18 +31,19 @@ the guard and the git hooks come from this package too.
 
 ## What a product gets
 
-| Layer        | Where in the product                             | Purpose                                                                                                         |
-| ------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| Map          | `CLAUDE.md`, `AGENTS.md`                         | Short index; detail lives in focused docs                                                                       |
-| Docs         | `docs/contributing/`                             | Intent, harness loop, shipping policy, security, testing, gotchas                                               |
-| Veto list    | `docs/contributing/decisions/`                   | Recorded "no" decisions so agents stop re-proposing them                                                        |
-| Taxonomy     | `docs/contributing/architecture/primitives.yaml` | Building blocks, invariants, risk floors; every source file has an owner                                        |
-| Skills       | `.claude/skills/`                                | new-product, review-and-recommend, ship-pr, verify-app                                                          |
-| Gate         | `npm run validate`                               | One local gate, identical in CI; `npx reins check` is one lane                                                  |
-| Hooks        | `.husky/`, `.claude/settings.json`               | Node version, doc checks, typecheck after edits, gate before stopping; destructive git and push-to-main blocked |
-| Housekeeping | `.github/workflows/merged-branch.yml`            | A merged PR's head branch is deleted, however it was merged; the guard requires `--delete-branch` too           |
-| Policy       | `reins.json` → `policy`                          | kody's risk tiers: who may merge, which reviewers must have spoken                                              |
-| Growth path  | `docs/contributing/growth.md`                    | What to add, and when it has earned its place                                                                   |
+| Layer        | Where in the product                              | Purpose                                                                                                                                                                |
+| ------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Map          | `CLAUDE.md`, `AGENTS.md`                          | Short index; detail lives in focused docs                                                                                                                              |
+| Docs         | `docs/contributing/`                              | Intent, harness loop, shipping policy, security, testing, gotchas                                                                                                      |
+| Veto list    | `docs/contributing/decisions/`                    | Recorded "no" decisions so agents stop re-proposing them                                                                                                               |
+| Taxonomy     | `docs/contributing/architecture/primitives.yaml`  | Building blocks, invariants, risk floors; every source file has an owner                                                                                               |
+| Skills       | `.claude/skills/`                                 | new-product, review-and-recommend, ship-pr, verify-app                                                                                                                 |
+| Toolchain    | `.oxlintrc.json`, `.prettierrc.json`, lint-staged | Shared format and lint; the product keeps its test runner, typechecker and build ([decision 0008](./docs/contributing/decisions/0008-harness-owns-format-and-lint.md)) |
+| Gate         | `npm run validate`                                | One local gate, identical in CI; `npx reins check` is one lane                                                                                                         |
+| Hooks        | `.husky/`, `.claude/settings.json`                | Node version, doc checks, typecheck after edits, gate before stopping; destructive git and push-to-main blocked                                                        |
+| Housekeeping | `.github/workflows/merged-branch.yml`             | A merged PR's head branch is deleted, however it was merged; the guard requires `--delete-branch` too                                                                  |
+| Policy       | `reins.json` → `policy`                           | kody's risk tiers: who may merge, which reviewers must have spoken                                                                                                     |
+| Growth path  | `docs/contributing/growth.md`                     | What to add, and when it has earned its place                                                                                                                          |
 
 `templates/manifest.json` says which of these are **managed** (kept in sync) and
 which are **owned** by the product after the first write
