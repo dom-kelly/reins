@@ -76,7 +76,7 @@ function pluginItems(root: string): Array<Item> {
 		source?.source === 'directory' &&
 		typeof source.path === 'string'
 	const marketplace = declared
-		? path.join(root, source.path!, '.claude-plugin/marketplace.json')
+		? path.resolve(root, source.path!, '.claude-plugin/marketplace.json')
 		: undefined
 	const installedPkg = path.join(
 		root,

@@ -604,6 +604,17 @@ test('doctor checks the Claude plugin wiring and the installed marketplace', asy
 			'{}',
 		)
 		expect(wiring(doctor(root)).every((i) => i.ok)).toBe(true)
+		// An absolute marketplace path is taken as it is, not joined under root.
+		await writeFile(
+			path.join(root, '.claude/settings.json'),
+			JSON.stringify({
+				extraKnownMarketplaces: {
+					reins: { source: { source: 'directory', path: installed } },
+				},
+				enabledPlugins: { 'reins@reins': true },
+			}),
+		)
+		expect(wiring(doctor(root)).every((i) => i.ok)).toBe(true)
 		expect(wiring(doctor(packageRoot)).every((i) => i.ok)).toBe(true)
 	} finally {
 		await rm(root, { recursive: true, force: true })

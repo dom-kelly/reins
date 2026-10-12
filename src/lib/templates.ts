@@ -173,8 +173,9 @@ export function migrateLegacyNames(root: string): Array<string> {
 
 /** Deletes the retired files a product still carries. A copy that matches its
  *  `.reins/base/` record goes, with the record and any directory left empty;
- *  an edited copy stays and is reported, so nothing a product wrote is lost
- *  silently. With `check`, reports only. */
+ *  a copy that differs, or has no record to compare with, stays and is
+ *  reported, so nothing a product wrote is lost silently. With `check`,
+ *  reports only. */
 export function retireTemplates(
 	root: string,
 	retired: ReadonlyArray<string>,
@@ -222,7 +223,8 @@ export type ApplyReport = {
 	kept: Array<string>
 	/** Retired files deleted (they matched their base record). */
 	removed: Array<string>
-	/** Retired files left in place because the product edited them. */
+	/** Retired files left in place: edited by the product, or no base record
+	 *  to prove they were not. */
 	retiredModified: Array<string>
 }
 
@@ -285,7 +287,8 @@ export type SyncReport = {
 	unchanged: Array<string>
 	/** Retired files deleted (they matched their base record). */
 	removed: Array<string>
-	/** Retired files left in place because the product edited them. */
+	/** Retired files left in place: edited by the product, or no base record
+	 *  to prove they were not. */
 	retiredModified: Array<string>
 }
 
@@ -439,7 +442,7 @@ export function formatSyncReport(report: SyncReport, check: boolean) {
 	section(`CONFLICTS (resolve the markers)`, report.conflicts)
 	section(`removed (the harness no longer ships them)`, report.removed)
 	section(
-		`RETIRED BUT EDITED LOCALLY (the harness owns these; delete the file, or keep your version under another name)`,
+		`RETIRED BUT NOT DELETED (edited locally, or no .reins/base record; the harness owns these: delete the file, or keep your version under another name)`,
 		report.retiredModified,
 	)
 	section(

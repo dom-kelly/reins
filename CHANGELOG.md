@@ -14,13 +14,13 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
   `reins@reins`, so the skills load in place as `/reins:<name>` and the lockfile
   pins them. `templates/manifest.json` has a `retired` list: sync and adopt
   delete a product's unedited copy of a retired file (and its `.reins/base/`
-  record) and report an edited one under "RETIRED BUT EDITED LOCALLY" (sync
-  exits 1) rather than deleting it. `reins check` refuses a product
-  `.claude/skills/<name>` or `.agents/skills/<name>` that reuses a reins skill's
-  name. `reins doctor` reports whether the plugin is declared and the
-  marketplace is on disk. Skills name product docs by repo-root path in prose
-  instead of relative links, and cross-reference each other as `/reins:<name>`.
-  **Taking it:** set the spec to
+  record) and report an edited one, or one with no base record, under "RETIRED
+  BUT NOT DELETED" (sync exits 1) rather than deleting it. `reins check` refuses
+  a product `.claude/skills/<name>` or `.agents/skills/<name>` that reuses a
+  reins skill's name. `reins doctor` reports whether the plugin is declared and
+  the marketplace is on disk. Skills name product docs by repo-root path in
+  prose instead of relative links, and cross-reference each other as
+  `/reins:<name>`. **Taking it:** set the spec to
   `git+https://github.com/dom-kelly/reins.git#semver:^0.3.0`, `npm install`,
   `npx reins sync` (the four skill copies go, `.claude/settings.json` gains the
   plugin block), then open Claude Code in the repo and accept the trust dialog;

@@ -90,7 +90,7 @@ export function formatAdoptReport(result: ReturnType<typeof adoptRepo>) {
 	}
 	if (result.report.retiredModified.length) {
 		lines.push(
-			`  RETIRED BUT EDITED LOCALLY (the harness owns these; delete the file, or keep your version under another name): ${result.report.retiredModified.join(', ')}`,
+			`  RETIRED BUT NOT DELETED (edited locally, or no .reins/base record; the harness owns these: delete the file, or keep your version under another name): ${result.report.retiredModified.join(', ')}`,
 		)
 	}
 	if (result.packageAdded.length) {
