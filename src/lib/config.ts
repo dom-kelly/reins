@@ -43,8 +43,9 @@ export type HarnessConfig = {
 		 *  every edit. */
 		typecheck?: string
 		/** Path prefixes, relative to the repo root, whose edits do not trigger
-		 *  the typecheck hook (generated or vendored code). `node_modules/`,
-		 *  `dist/`, `build/` and `.react-router/` are always skipped. */
+		 *  the typecheck hook (generated or vendored code). A `node_modules`,
+		 *  `dist`, `build` or `.react-router` directory anywhere in the tree is
+		 *  always skipped. */
 		typecheckIgnore?: Array<string>
 	}
 	/** Who may merge at each risk tier and which reviewers must have spoken. */

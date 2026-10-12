@@ -64,13 +64,14 @@ function notice(message: string) {
 	console.log(JSON.stringify({ systemMessage: message }))
 }
 
-/** Generated or vendored code: a typecheck there is noise, not a signal. */
-const typecheckIgnoredByDefault = [
-	'node_modules/',
-	'dist/',
-	'build/',
-	'.react-router/',
-]
+/** Generated or vendored code, wherever it sits in the tree: a typecheck
+ *  there is noise, not a signal. */
+const typecheckIgnoredDirs = new Set([
+	'node_modules',
+	'dist',
+	'build',
+	'.react-router',
+])
 
 /** Follows symlinks so a root from `git rev-parse` (real path) and a file
  *  path from Claude Code (as typed) compare equal. The file may not exist
@@ -90,27 +91,44 @@ function realOrResolved(file: string) {
 	}
 }
 
+/** `file` relative to `root` when it is inside, else undefined. Checked as
+ *  typed first, so an in-repo symlink that points outside still counts as
+ *  in-repo; by real path second, so a symlinked root (macOS /var) does. */
+function insideRoot(root: string, file: string) {
+	const absolute = path.resolve(root, file)
+	for (const [base, target] of [
+		[path.resolve(root), absolute],
+		[realOrResolved(root), realOrResolved(absolute)],
+	]) {
+		const relative = path.relative(base!, target!)
+		if (
+			relative &&
+			relative !== '..' &&
+			!relative.startsWith(`..${path.sep}`) &&
+			!path.isAbsolute(relative)
+		)
+			return relative.split(path.sep).join('/')
+	}
+	return undefined
+}
+
 /** The edited file relative to `root` (posix), or undefined when it is
- *  outside the repo or under an ignored prefix: edits there do not touch the
- *  product's types, so the hook has nothing to check. */
+ *  outside the repo or under an ignored directory: edits there do not touch
+ *  the product's types, so the hook has nothing to check. */
 export function typecheckTarget(
 	root: string,
 	file: string,
 	config: HarnessConfig | undefined,
 ) {
-	const relative = path.relative(
-		realOrResolved(root),
-		realOrResolved(path.resolve(root, file)),
-	)
-	if (!relative || relative.startsWith('..') || path.isAbsolute(relative))
-		return undefined
-	const posix = relative.split(path.sep).join('/')
-	const ignored = [
-		...typecheckIgnoredByDefault,
-		...(config?.hooks?.typecheckIgnore ?? []),
-	]
-	for (const prefix of ignored) {
-		const dir = prefix.replace(/\/+$/, '')
+	const posix = insideRoot(root, file)
+	if (!posix) return undefined
+	const dirs = posix.split('/').slice(0, -1)
+	if (dirs.some((dir) => typecheckIgnoredDirs.has(dir))) return undefined
+	for (const prefix of config?.hooks?.typecheckIgnore ?? []) {
+		// Prefixes are root-relative and match whole segments: `generated/`
+		// covers generated/a.ts but not generated2/a.ts.
+		const dir = path.posix.normalize(prefix).replace(/^\.\/|^\/+|\/+$/g, '')
+		if (!dir || dir === '.') continue
 		if (posix === dir || posix.startsWith(`${dir}/`)) return undefined
 	}
 	return posix
@@ -132,7 +150,16 @@ export function runTypecheckHook(
 		(JSON.parse(input) as { tool_input?: { file_path?: string } }).tool_input
 			?.file_path ?? ''
 	if (!/\.(ts|tsx|mts|cts)$/.test(file)) return 0
-	const config = readConfig(root)
+	let config: HarnessConfig | undefined
+	try {
+		config = readConfig(root)
+	} catch (error) {
+		// Still typecheck with the defaults; a broken config must not block
+		// every edit behind the wrapper's "is reins installed?" message.
+		notice(
+			`typecheck hook: cannot read reins.json (${(error as Error).message}); running with defaults`,
+		)
+	}
 	if (!typecheckTarget(root, file, config)) return 0
 	const script = typecheckScript(config)
 	if (!hasScript(root, script)) {
