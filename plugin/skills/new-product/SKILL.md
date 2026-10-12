@@ -25,28 +25,27 @@ Ask only what you cannot infer. Batch into a single question set:
 
 ## 2. Write intent
 
-Fill [project-intent.md](../../../docs/contributing/project-intent.md). Keep it
-to one page. Put the one-line product summary at the top of `CLAUDE.md`.
+Fill `docs/contributing/project-intent.md`. Keep it to one page. Put the
+one-line product summary at the top of `CLAUDE.md`.
 
 ## 3. Choose the stack
 
-If the owner has no preference, use `review-and-recommend`: 2–3 stacks with
-effort and one-way/two-way door labels, one recommendation. Stop for a choice.
-Record the chosen stack's one-way-door aspects as a decision record.
+If the owner has no preference, use `/reins:review-and-recommend`: 2–3 stacks
+with effort and one-way/two-way door labels, one recommendation. Stop for a
+choice. Record the chosen stack's one-way-door aspects as a decision record.
 
 ## 4. Shape primitives
 
-Rewrite
-[primitives.yaml](../../../docs/contributing/architecture/primitives.yaml) with
-4–8 primitives (entry points, auth, core domain objects, storage, jobs). Give
-each a `code` root (create empty directories with a stub module if needed), a
-`docs` link, and `invariants` for anything that must never break (for example
-per-user data isolation).
+Rewrite `docs/contributing/architecture/primitives.yaml` with 4–8 primitives
+(entry points, auth, core domain objects, storage, jobs). Give each a `code`
+root (create empty directories with a stub module if needed), a `docs` link, and
+`invariants` for anything that must never break (for example per-user data
+isolation).
 
 ## 5. Record the noes
 
 For each non-goal an agent would plausibly re-propose, add a decision record
-(see [decisions/index.md](../../../docs/contributing/decisions/index.md)).
+(see `docs/contributing/decisions/index.md`).
 
 ## 6. Adapt the harness to the stack
 
@@ -54,7 +53,7 @@ For each non-goal an agent would plausibly re-propose, add a decision record
 - Update the `dev` script and the `code` roots in `primitives.yaml`; keep every
   check in `validate`.
 - Add stack-specific checkers only when they encode a rule that was broken
-  ([growth.md](../../../docs/contributing/growth.md)).
+  (`docs/contributing/growth.md`).
 
 ## 7. Plan slices
 

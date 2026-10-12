@@ -4,12 +4,13 @@
 		"name": "reins"
 	},
 	"checks": {
-		"ignoreLinksIn": [".claude/skills/"],
 		"bumpVersionWhen": [
 			"src/",
 			"bin/",
 			"templates/",
 			"scaffold/",
+			"plugin/",
+			".claude-plugin/",
 			"scripts/",
 			"package.json"
 		]

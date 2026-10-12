@@ -4,6 +4,30 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.3.0] - 2026-10-12
+
+- The skills ship as a Claude Code plugin instead of managed copies
+  ([decision 0009](./docs/contributing/decisions/0009-skills-ship-as-a-plugin.md)).
+  `plugin/skills/` and `.claude-plugin/marketplace.json` travel with the
+  package; a product's `.claude/settings.json` now registers that marketplace as
+  a `directory` source at `./node_modules/@dom-kelly/reins` and enables
+  `reins@reins`, so the skills load in place as `/reins:<name>` and the lockfile
+  pins them. `templates/manifest.json` has a `retired` list: sync and adopt
+  delete a product's unedited copy of a retired file (and its `.reins/base/`
+  record) and report an edited one, or one with no base record, under "RETIRED
+  BUT NOT DELETED" (sync exits 1) rather than deleting it. `reins check` refuses
+  a product `.claude/skills/<name>` or `.agents/skills/<name>` that reuses a
+  reins skill's name. `reins doctor` reports whether the plugin is declared and
+  the marketplace is on disk. Skills name product docs by repo-root path in
+  prose instead of relative links, and cross-reference each other as
+  `/reins:<name>`. **Taking it:** set the spec to
+  `git+https://github.com/dom-kelly/reins.git#semver:^0.3.0`, `npm install`,
+  `npx reins sync` (the four skill copies go, `.claude/settings.json` gains the
+  plugin block), then open Claude Code in the repo and accept the trust dialog;
+  skills are now `/reins:new-product`, `/reins:review-and-recommend`,
+  `/reins:ship-pr`, `/reins:verify-app`. Repo-declared plugins do not load in
+  cloud or headless sessions.
+
 ## [0.2.8] - 2026-10-12
 
 - A reviewer named in `policy.reviewers` must exist on the repo. Before

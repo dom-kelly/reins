@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { checkNodeVersion } from '../checks/node-version.ts'
 import { packageVersion, readConfig } from '../lib/config.ts'
@@ -43,6 +43,72 @@ function autoDeleteItem(root: string): Item | undefined {
 		fix: 'gh repo edit --delete-branch-on-merge',
 		info: true,
 	}
+}
+
+type ClaudeSettings = {
+	extraKnownMarketplaces?: Record<
+		string,
+		{ source?: { source?: string; path?: string } }
+	>
+	enabledPlugins?: Record<string, boolean>
+}
+
+/** Releases before 0.3.0 shipped no plugin (decision 0009). */
+function predatesPlugin(version: string) {
+	const [major = 0, minor = 0] = version.split('.').map(Number)
+	return major === 0 && minor < 3
+}
+
+/** The skills come from the reins plugin, which Claude Code loads in place
+ *  from a `directory` marketplace that .claude/settings.json declares
+ *  (decision 0009). Two offline lines: is it declared, and is it on disk. */
+function pluginItems(root: string): Array<Item> {
+	const file = path.join(root, '.claude/settings.json')
+	let settings: ClaudeSettings | undefined
+	try {
+		settings = JSON.parse(readFileSync(file, 'utf8')) as ClaudeSettings
+	} catch {
+		settings = undefined
+	}
+	const source = settings?.extraKnownMarketplaces?.reins?.source
+	const declared =
+		settings?.enabledPlugins?.['reins@reins'] === true &&
+		source?.source === 'directory' &&
+		typeof source.path === 'string'
+	const marketplace = declared
+		? path.resolve(root, source.path!, '.claude-plugin/marketplace.json')
+		: undefined
+	const installedPkg = path.join(
+		root,
+		'node_modules/@dom-kelly/reins/package.json',
+	)
+	let installed: string | undefined
+	try {
+		installed = (
+			JSON.parse(readFileSync(installedPkg, 'utf8')) as { version?: string }
+		).version
+	} catch {
+		installed = undefined
+	}
+	return [
+		{
+			label: declared
+				? `.claude/settings.json loads the reins plugin (/reins:*) from ${source!.path}`
+				: '.claude/settings.json does not load the reins plugin (extraKnownMarketplaces.reins + enabledPlugins reins@reins)',
+			ok: declared,
+			fix: 'npx reins sync',
+		},
+		{
+			label: marketplace
+				? `the reins marketplace is on disk (${path.relative(root, marketplace)})`
+				: 'the reins marketplace location is unknown until .claude/settings.json declares it',
+			ok: marketplace !== undefined && existsSync(marketplace),
+			fix:
+				installed && predatesPlugin(installed)
+					? `npm update @dom-kelly/reins (installed ${installed} predates the plugin; the spec may need #semver:^0.3.0)`
+					: 'npm install',
+		},
+	]
 }
 
 const unchecked = (why: string, fix: string): Array<Item> => [
@@ -143,6 +209,7 @@ export function doctor(root: string): Array<Item> {
 				),
 			fix: 'npm install',
 		},
+		...pluginItems(root),
 		{
 			// The harness repo does not sync from itself, so its own field is not compared.
 			label: config

@@ -71,6 +71,30 @@ test('a product built from the packed package passes its own validate', async ()
 		const install = run('npm', ['install', '--no-audit', '--no-fund'], product)
 		expect(install.code, install.out).toBe(0)
 
+		// The skills travel with the package and load in place from here
+		// (decision 0009), so `files` must pack the plugin and its marketplace.
+		const installedReins = path.join(product, 'node_modules/@dom-kelly/reins')
+		for (const rel of [
+			'.claude-plugin/marketplace.json',
+			'plugin/.claude-plugin/plugin.json',
+			'plugin/skills/ship-pr/SKILL.md',
+		]) {
+			expect(existsSync(path.join(installedReins, rel)), rel).toBe(true)
+		}
+		expect(
+			JSON.parse(
+				readFileSync(
+					path.join(installedReins, 'plugin/.claude-plugin/plugin.json'),
+					'utf8',
+				),
+			).version,
+		).toBe(
+			JSON.parse(
+				readFileSync(path.join(installedReins, 'package.json'), 'utf8'),
+			).version,
+		)
+		expect(existsSync(path.join(product, '.claude/skills'))).toBe(false)
+
 		const helpText = run('npx', ['reins', '--help'], product)
 		expect(helpText.code, helpText.out).toBe(0)
 		expect(helpText.out).toContain('reins sync')

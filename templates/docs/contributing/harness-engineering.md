@@ -77,6 +77,13 @@ place are in [growth.md](./growth.md).
 
 `.claude/settings.json` applies to every Claude Code session in this repo:
 
+- It registers the reins plugin (`extraKnownMarketplaces` → a `directory`
+  marketplace at `./node_modules/@dom-kelly/reins`, `enabledPlugins`
+  `reins@reins`), so the skills load in place as `/reins:<name>` and the
+  lockfile pins their version exactly as it pins the hooks below. They load
+  after the workspace trust dialog, not in cloud or headless sessions; run
+  `/reload-plugins` after `npm update`.
+
 - A PreToolUse hook on Bash, the harness guard (`npx reins hook guard-bash`),
   refuses force-pushes (`--force`, `-f`, `--force-with-lease`), a push to `main`
   or `master`, `--no-verify` on commit or push, `git reset --hard` and

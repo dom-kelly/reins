@@ -10,31 +10,41 @@ node bin/reins.ts --help
 
 ## Layout
 
-| Path                 | What                                                                         |
-| -------------------- | ---------------------------------------------------------------------------- |
-| `bin/reins.ts`       | CLI entry: new, adopt, sync, check, classify, policy, doctor, hook           |
-| `src/checks/`        | Checkers behind `reins check` and the git hooks                              |
-| `src/hooks/`         | The Bash guard, the typecheck and gate-on-stop hooks, the git hook runner    |
-| `src/policy/`        | `reins policy`: risk tiers, reviewers, authority; tested against a stub `gh` |
-| `src/lib/`           | Repo discovery, `reins.json`, template apply and three-way sync              |
-| `src/cli/`           | new, adopt, doctor                                                           |
-| `templates/`         | Files written into products; `manifest.json` says which are managed vs owned |
-| `scaffold/app-node/` | The placeholder app `reins new` starts from                                  |
-| `docs/contributing/` | These docs, about the harness itself                                         |
-
-The root `.claude/skills` holds copies of `templates/.claude/skills`: the
-harness uses the same skills it ships. A test fails if the copies drift, so edit
-the template and copy it over (a symlink breaks git stash and npm pack). Their
-links point at product docs, so `reins.json` lists them under
-`checks.ignoreLinksIn`.
+| Path                 | What                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------- |
+| `bin/reins.ts`       | CLI entry: new, adopt, sync, check, classify, policy, doctor, hook                    |
+| `src/checks/`        | Checkers behind `reins check` and the git hooks                                       |
+| `src/hooks/`         | The Bash guard, the typecheck and gate-on-stop hooks, the git hook runner             |
+| `src/policy/`        | `reins policy`: risk tiers, reviewers, authority; tested against a stub `gh`          |
+| `src/lib/`           | Repo discovery, `reins.json`, template apply and three-way sync                       |
+| `src/cli/`           | new, adopt, doctor                                                                    |
+| `templates/`         | Files written into products; `manifest.json` says which are managed, owned or retired |
+| `scaffold/app-node/` | The placeholder app `reins new` starts from                                           |
+| `plugin/`            | The Claude Code plugin: the skills, which products load in place from node_modules    |
+| `.claude-plugin/`    | The marketplace that lists the plugin; the package root is the marketplace root       |
+| `docs/contributing/` | These docs, about the harness itself                                                  |
 
 The harness does not adopt itself through `reins sync`. Decision
 [0004](./decisions/0004-harness-is-a-cli-package.md) keeps this repo's
 `docs/contributing/` (about developing the harness) distinct from the
 product-facing docs under `templates/`; a full self-adopt would overwrite one
-with the other. The copied skills and workflow, each with an equality test, are
-the deliberate compromise: the harness runs the files it ships without becoming
-a product of itself.
+with the other. The copied merged-branch workflow (with an equality test) and
+the plugin block in `.claude/settings.json` (pointing at `.`, where a product
+points at `./node_modules/@dom-kelly/reins`) are the deliberate compromise: the
+harness runs what it ships without becoming a product of itself.
+
+## Changing a skill
+
+Edit `plugin/skills/<name>/SKILL.md`. Nothing is copied anywhere: this repo
+loads it from `.` and a product from its installed package, so a product takes
+the change with `npm update @dom-kelly/reins` and `/reload-plugins` (no `sync`
+needed). Skills are read from outside the product tree, so they name product
+docs by repo-root path in prose (`docs/contributing/gotchas.md`), never by
+relative link; a test enforces it. `claude plugin validate --strict .` checks
+the marketplace and plugin manifests (CI has no `claude`, so run it by hand when
+you touch them). A product may not keep a `.claude/skills/<name>` under a reins
+skill's name (`reins check` refuses it,
+[decision 0009](./decisions/0009-skills-ship-as-a-plugin.md)).
 
 ## Changing a template
 
@@ -42,7 +52,9 @@ a product of itself.
    this repo; keep them stack-agnostic.
 2. If you add or remove a file, update `templates/manifest.json`. Managed files
    are synced into products (three-way merge); owned files are written once and
-   never touched again.
+   never touched again; a file the harness stops shipping moves to `retired`,
+   and sync deletes a product's copy when it still matches its `.reins/base/`
+   record (an edited copy is reported, never deleted).
 3. `npm run validate`. The CLI tests (`src/cli/cli.test.ts`) create a product in
    a temp dir and run every check against it, so a template that breaks a
    product fails here.
@@ -86,13 +98,15 @@ A release is a tag; products pin a range on tags
 ([decision 0007](./decisions/0007-versioned-by-tag.md)).
 
 1. In the PR that changes shipped code (`src/`, `bin/`, `templates/`,
-   `scaffold/`, `scripts/`, `package.json`), bump `version` in `package.json`
-   (`npm version patch|minor --no-git-tag-version`) and add a `## [<version>]`
-   entry to `CHANGELOG.md`. The repo rules check in `npm run validate` fails
-   without both; a change to `package-lock.json` alone needs neither.
+   `scaffold/`, `plugin/`, `.claude-plugin/`, `scripts/`, `package.json`), bump
+   `version` in `package.json` (`npm version patch|minor --no-git-tag-version`)
+   and in `plugin/.claude-plugin/plugin.json` (a test keeps them equal), and add
+   a `## [<version>]` entry to `CHANGELOG.md`. The repo rules check in
+   `npm run validate` fails without both; a change to `package-lock.json` alone
+   needs neither.
 2. On merge, `.github/workflows/release.yml` tags main `v<version>` when no such
    tag exists.
-3. Products depend on `git+https://github.com/dom-kelly/reins.git#semver:^0.2.0`
+3. Products depend on `git+https://github.com/dom-kelly/reins.git#semver:^0.3.0`
    and take a release with `npm update @dom-kelly/reins && npx reins sync`. A
    new minor is taken by editing the spec; `reins adopt` writes the current
    major.minor and a test keeps `scaffold/app-node/package.json` on it.

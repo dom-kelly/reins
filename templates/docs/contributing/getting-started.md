@@ -25,7 +25,7 @@ for anything that needs a human (secrets, logins, app installs).
 
 ## Starting a new product from this boilerplate
 
-1. Run the `new-product` skill with your product idea. It fills
+1. Run `/reins:new-product` with your product idea. It fills
    [project-intent.md](./project-intent.md), reshapes
    [primitives.yaml](./architecture/primitives.yaml), records the first
    decisions, and proposes the first vertical slices.

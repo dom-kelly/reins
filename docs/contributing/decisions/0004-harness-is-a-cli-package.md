@@ -24,7 +24,10 @@ Files fall into three kinds, listed in `templates/manifest.json`:
 - **managed** — written by new/adopt, kept in step by sync;
 - **owned** — written once if absent, then the product's (intent, primitives,
   decisions, gotchas, security, services);
-- the **engine** — in this package only.
+- the **engine** — in this package only; since
+  [0009](./0009-skills-ship-as-a-plugin.md) that includes the skills, which a
+  product loads from the package instead of holding a copy (a **retired**
+  manifest list makes sync delete the copies it once wrote).
 
 The harness owns its checks, hooks, templates and policy, and the format and
 lint toolchain (prettier, oxlint, lint-staged via husky; see

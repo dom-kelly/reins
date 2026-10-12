@@ -5,7 +5,9 @@
 - `CLAUDE.md` — the map. Links only, plus the one-line product summary.
 - `docs/contributing/` — how the system works and how to change it.
 - `docs/contributing/decisions/` — point-in-time "no" decisions.
-- `.claude/skills/` — repeatable workflows. Thin: steps plus links to docs.
+- Skills — repeatable workflows, thin: steps plus the docs they rely on. The
+  harness's ship as `/reins:*` (change them in reins, not here); a workflow of
+  this product's own goes in `.claude/skills/` under a name of its own.
 - Code comments — only for a non-obvious _why_ that a reader of that line needs.
 
 ## How to write them

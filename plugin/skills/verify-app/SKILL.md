@@ -11,9 +11,8 @@ description: >
 A green gate is necessary, not sufficient: it says nothing about the screen or
 route you changed.
 
-1. Start the app the way
-   [getting-started.md](../../../docs/contributing/getting-started.md) says, on
-   a fresh or seeded local dataset. Never against production data.
+1. Start the app the way `docs/contributing/getting-started.md` says, on a fresh
+   or seeded local dataset. Never against production data.
 2. Create the data the change needs first. A passing health check or sign-in
    proves nothing about the changed surface.
 3. Drive the changed surface. For HTTP, assert on content, not only status. For
@@ -26,5 +25,4 @@ route you changed.
    screenshot for UI changes.
 
 If you write the same driver script twice, turn it into a script with a test
-instead; that is the trigger for an app CLI in
-[growth.md](../../../docs/contributing/growth.md).
+instead; that is the trigger for an app CLI in `docs/contributing/growth.md`.

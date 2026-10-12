@@ -1,4 +1,15 @@
 {
+	"extraKnownMarketplaces": {
+		"reins": {
+			"source": {
+				"source": "directory",
+				"path": "."
+			}
+		}
+	},
+	"enabledPlugins": {
+		"reins@reins": true
+	},
 	"permissions": {
 		"allow": [
 			"Bash(npm run validate)",

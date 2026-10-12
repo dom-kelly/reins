@@ -88,7 +88,12 @@ async function main(): Promise<number> {
 			const check = flags.has('--check')
 			const report = await syncTemplates(root, config.product, { check })
 			console.log(formatSyncReport(report, check))
-			if (report.missingBase.length || report.conflicts.length) return 1
+			if (
+				report.missingBase.length ||
+				report.conflicts.length ||
+				report.retiredModified.length
+			)
+				return 1
 			return check && hasChanges(report) ? 1 : 0
 		}
 		case 'check': {

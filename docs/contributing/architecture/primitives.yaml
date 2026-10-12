@@ -8,9 +8,11 @@ scan:
   - bin
   - templates
   - scaffold
+  - plugin
+  - .claude-plugin
 
-# Docs, the map itself and the repo's own agent config (.claude/, a copy of
-# what products receive) belong to no primitive; changing them alone is low risk.
+# Docs, the map itself and the repo's own agent config (.claude/, the hooks and
+# the plugin wiring this repo uses on itself) belong to no primitive; changing them alone is low risk.
 unowned:
   - docs/
   - .claude/
@@ -87,11 +89,15 @@ primitives:
   - id: templates
     group: content
     name: Product templates and scaffold
-    summary: Managed and owned files written into products, and the starter app.
+    summary:
+      Files written into products, the starter app, and the skills plugin
+      (0009).
     floor: medium
     code:
       - templates
       - scaffold
+      - plugin
+      - .claude-plugin
       # The repo's own copy of a template, kept identical by a test.
       - .github/workflows/merged-branch.yml
     docs:
