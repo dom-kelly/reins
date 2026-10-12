@@ -30,11 +30,17 @@ all up front.
 
 ## Skills
 
-Workflows live in `.claude/skills/`. Use them by name:
+Workflows come from the reins plugin, which `.claude/settings.json` loads from
+`node_modules/@dom-kelly/reins`. Invoke them by name:
 
-- `new-product` — turn a product idea into intent, primitives, decisions, and
-  the first vertical slices.
-- `review-and-recommend` — options with effort and one-way/two-way door labels,
-  a recommendation, then stop.
-- `ship-pr` — shepherd a change through validate, review, and CI to done.
-- `verify-app` — prove a change against the running app and record evidence.
+- `/reins:new-product` — turn a product idea into intent, primitives, decisions,
+  and the first vertical slices.
+- `/reins:review-and-recommend` — options with effort and one-way/two-way door
+  labels, a recommendation, then stop.
+- `/reins:ship-pr` — shepherd a change through validate, review, and CI to done.
+- `/reins:verify-app` — prove a change against the running app and record
+  evidence.
+
+The harness owns these: do not copy or edit them here (`npx reins check` refuses
+a `.claude/skills/<name>` that reuses one of their names). A workflow this
+product needs that the harness lacks is a new skill under a different name.

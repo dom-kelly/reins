@@ -1,7 +1,7 @@
 # Project intent
 
-Fill this in with the `new-product` skill before writing product code. Agents
-read this to decide whether a proposal is in scope. Keep it under one page.
+Fill this in with `/reins:new-product` before writing product code. Agents read
+this to decide whether a proposal is in scope. Keep it under one page.
 
 ## Product
 

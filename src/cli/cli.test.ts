@@ -11,8 +11,14 @@ import {
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { expect, test } from 'vitest'
-import { checkDocLinks } from '../checks/doc-links.ts'
+import { checkDocLinks, extractRelativeLinks } from '../checks/doc-links.ts'
 import { runChecks } from '../checks/run.ts'
+import {
+	checkSkills,
+	findSkillIssues,
+	pluginSkillNames,
+	pluginSkillsDir,
+} from '../checks/skills.ts'
 import {
 	configFile,
 	legacyConfigFile,
@@ -25,6 +31,7 @@ import {
 	applyTemplates,
 	baseDir,
 	dependencySpec,
+	hasChanges,
 	legacyBaseDir,
 	loadManifest,
 	mergeThreeWay,
@@ -78,7 +85,7 @@ test('adopt keeps existing files and only adds to package.json', async () => {
 		expect(await readFile(path.join(root, 'CLAUDE.md'), 'utf8')).toBe(
 			'# mine\n',
 		)
-		expect(result.report.written).toContain('.claude/skills/ship-pr/SKILL.md')
+		expect(result.report.written).toContain('.claude/settings.json')
 		const pkg = JSON.parse(
 			await readFile(path.join(root, 'package.json'), 'utf8'),
 		)
@@ -108,7 +115,12 @@ test('products pin the harness to a semver range on tags, the same in adopt and 
 	).toBe(dependencySpec)
 })
 
-async function fakeTemplates(dir: string, files: Record<string, string>) {
+async function fakeTemplates(
+	dir: string,
+	files: Record<string, string>,
+	retired: Array<string> = [],
+) {
+	await rm(dir, { recursive: true, force: true })
 	for (const [rel, content] of Object.entries(files)) {
 		await mkdir(path.dirname(path.join(dir, rel)), { recursive: true })
 		await writeFile(path.join(dir, rel), content)
@@ -118,9 +130,80 @@ async function fakeTemplates(dir: string, files: Record<string, string>) {
 		JSON.stringify({
 			managed: Object.keys(files).filter((f) => f.startsWith('managed')),
 			owned: Object.keys(files).filter((f) => f.startsWith('owned')),
+			retired,
 		}),
 	)
 }
+
+test('sync retires a file the harness no longer ships: unedited copies go, edited ones are reported', async () => {
+	const dir = await tmp('retire')
+	const root = path.join(dir, 'repo')
+	const templates = path.join(dir, 'templates')
+	try {
+		await mkdir(root)
+		const vars = { name: 'meals' }
+		await fakeTemplates(templates, {
+			'managed/keep.md': 'keep\n',
+			'managed/old/one/SKILL.md': 'one\n',
+			'managed/old/two/SKILL.md': 'two\n',
+		})
+		applyTemplates(root, vars, { overwrite: true, templatesDir: templates })
+		await writeFile(path.join(root, 'managed/old/two/SKILL.md'), 'mine\n')
+		// The next release drops both.
+		await fakeTemplates(templates, { 'managed/keep.md': 'keep\n' }, [
+			'managed/old/one/SKILL.md',
+			'managed/old/two/SKILL.md',
+		])
+		const dry = await syncTemplates(root, vars, {
+			check: true,
+			templatesDir: templates,
+		})
+		expect(dry).toMatchObject({
+			removed: ['managed/old/one/SKILL.md'],
+			retiredModified: ['managed/old/two/SKILL.md'],
+		})
+		expect(hasChanges(dry)).toBe(true)
+		expect(existsSync(path.join(root, 'managed/old/one/SKILL.md'))).toBe(true)
+
+		const report = await syncTemplates(root, vars, { templatesDir: templates })
+		expect(report).toEqual(dry)
+		expect(existsSync(path.join(root, 'managed/old/one'))).toBe(false)
+		expect(existsSync(path.join(root, baseDir, 'managed/old/one'))).toBe(false)
+		expect(
+			await readFile(path.join(root, 'managed/old/two/SKILL.md'), 'utf8'),
+		).toBe('mine\n')
+		expect(existsSync(path.join(root, 'managed/keep.md'))).toBe(true)
+
+		// Once the product deletes its edited copy, the stray base record goes too.
+		await rm(path.join(root, 'managed/old/two'), { recursive: true })
+		const again = await syncTemplates(root, vars, { templatesDir: templates })
+		expect(again).toMatchObject({ removed: [], retiredModified: [] })
+		expect(existsSync(path.join(root, baseDir, 'managed/old'))).toBe(false)
+
+		// adopt on a repo still carrying an unedited copy cleans it up as well.
+		await writeFile(path.join(root, 'managed/old/one/SKILL.md'), 'one\n').catch(
+			async () => {
+				await mkdir(path.join(root, 'managed/old/one'), { recursive: true })
+				await writeFile(path.join(root, 'managed/old/one/SKILL.md'), 'one\n')
+			},
+		)
+		await mkdir(path.join(root, baseDir, 'managed/old/one'), {
+			recursive: true,
+		})
+		await writeFile(
+			path.join(root, baseDir, 'managed/old/one/SKILL.md'),
+			'one\n',
+		)
+		const adopted = applyTemplates(root, vars, {
+			overwrite: false,
+			templatesDir: templates,
+		})
+		expect(adopted.removed).toEqual(['managed/old/one/SKILL.md'])
+		expect(existsSync(path.join(root, 'managed/old'))).toBe(false)
+	} finally {
+		await rm(dir, { recursive: true, force: true })
+	}
+})
 
 test('sync: updates untouched files, merges edited ones, flags conflicts, never touches owned', async () => {
 	const dir = await tmp('sync')
@@ -203,16 +286,91 @@ test('sync: updates untouched files, merges edited ones, flags conflicts, never 
 	}
 })
 
-test('the harness uses the same skills it ships (copies, not a symlink)', async () => {
-	const templateSkills = path.join(packageRoot, 'templates/.claude/skills')
-	const names = await readdir(templateSkills)
-	expect(names.length).toBeGreaterThan(0)
+// The skills are read from node_modules (or, here, from `plugin/`), so a
+// relative link would resolve against the wrong tree: they name product docs
+// by repo-root path in prose instead (decision 0009).
+test('the plugin skills pass the skill check and link to nothing relative', async () => {
+	const names = pluginSkillNames()
+	expect(names.toSorted()).toEqual([
+		'new-product',
+		'review-and-recommend',
+		'ship-pr',
+		'verify-app',
+	])
 	for (const name of names) {
-		const rel = path.join(name, 'SKILL.md')
-		expect(
-			await readFile(path.join(packageRoot, '.claude/skills', rel), 'utf8'),
-			`${rel} differs: cp -R templates/.claude/skills .claude/`,
-		).toBe(await readFile(path.join(templateSkills, rel), 'utf8'))
+		const rel = `${pluginSkillsDir}/${name}/SKILL.md`
+		const source = await readFile(path.join(packageRoot, rel), 'utf8')
+		expect(findSkillIssues(rel, source), rel).toEqual([])
+		expect(extractRelativeLinks(source), rel).toEqual([])
+	}
+})
+
+const readPackageJson = async (rel: string) =>
+	JSON.parse(await readFile(path.join(packageRoot, rel), 'utf8'))
+
+test('the marketplace, the plugin manifest and package.json agree', async () => {
+	const read = readPackageJson
+	const marketplace = await read('.claude-plugin/marketplace.json')
+	expect(marketplace.name).toBe('reins')
+	expect(marketplace.plugins).toHaveLength(1)
+	expect(marketplace.plugins[0]).toMatchObject({
+		name: 'reins',
+		source: './plugin',
+	})
+	const plugin = await read('plugin/.claude-plugin/plugin.json')
+	expect(plugin.name).toBe('reins')
+	expect(
+		plugin.version,
+		'plugin/.claude-plugin/plugin.json must carry the package version',
+	).toBe(packageVersion)
+	const pkg = await read('package.json')
+	expect(pkg.files).toContain('plugin')
+	expect(pkg.files).toContain('.claude-plugin')
+})
+
+// A product loads the plugin in place from its node_modules, so the lockfile
+// pins the skills exactly as it pins the hook engine; the harness loads its
+// own from the repo root, which is the marketplace.
+test('both settings files enable the reins plugin from a directory marketplace', async () => {
+	for (const [file, marketplacePath] of [
+		['templates/.claude/settings.json', './node_modules/@dom-kelly/reins'],
+		['.claude/settings.json', '.'],
+	] as const) {
+		const settings = JSON.parse(
+			await readFile(path.join(packageRoot, file), 'utf8'),
+		)
+		expect(settings.extraKnownMarketplaces, file).toEqual({
+			reins: { source: { source: 'directory', path: marketplacePath } },
+		})
+		expect(settings.enabledPlugins, file).toEqual({ 'reins@reins': true })
+		// First, so a product's edits further down merge cleanly on sync.
+		expect(Object.keys(settings).slice(0, 2), file).toEqual([
+			'extraKnownMarketplaces',
+			'enabledPlugins',
+		])
+	}
+})
+
+const productSkill = (name: string) =>
+	`---\nname: ${name}\ndescription: A product workflow that does a thing. Use when the user asks for the thing.\n---\n# ${name}\n`
+
+test("a product skill may not take a reins skill's name", async () => {
+	const root = await tmp('shadow')
+	try {
+		const skill = productSkill
+		for (const name of ['ship-pr', 'deploy']) {
+			await mkdir(path.join(root, '.claude/skills', name), { recursive: true })
+			await writeFile(
+				path.join(root, '.claude/skills', name, 'SKILL.md'),
+				skill(name),
+			)
+		}
+		const { issues } = await checkSkills(root)
+		expect(issues).toHaveLength(1)
+		expect(issues[0]).toMatchObject({ file: '.claude/skills/ship-pr/SKILL.md' })
+		expect(issues[0]!.message).toContain('/reins:ship-pr')
+	} finally {
+		await rm(root, { recursive: true, force: true })
 	}
 })
 
@@ -239,6 +397,14 @@ const retiredPhrases: ReadonlyArray<{ phrase: string; why: string }> = [
 		phrase: '(`npx harness hook ',
 		why: 'a nested-backtick fragment that once mangled the guardrails bullet',
 	},
+	{
+		phrase: 'Workflows live in `.claude/skills/`',
+		why: 'the skills ship as the reins plugin and are invoked as /reins:<name> (decision 0009)',
+	},
+	{
+		phrase: 'templates/.claude/skills',
+		why: 'the skills live in plugin/skills (decision 0009)',
+	},
 ]
 // A record of the rename has to quote the old names; nothing else may.
 const retiredPhraseExemptions: Record<string, ReadonlyArray<string>> = {
@@ -246,6 +412,10 @@ const retiredPhraseExemptions: Record<string, ReadonlyArray<string>> = {
 		'npx harness',
 		'harness.json',
 		'.harness/',
+	],
+	'docs/contributing/decisions/0009-skills-ship-as-a-plugin.md': [
+		'Workflows live in `.claude/skills/`',
+		'templates/.claude/skills',
 	],
 }
 
@@ -282,13 +452,20 @@ test('every template is in the manifest exactly once, and every entry exists', a
 		// Finder leaves .DS_Store behind; it is gitignored, not a template.
 		.filter((rel) => rel !== 'manifest.json' && !rel.endsWith('.DS_Store'))
 		.toSorted()
-	const { managed, owned } = loadManifest()
+	const { managed, owned, retired = [] } = loadManifest()
 	const listed = [...managed, ...owned]
 	expect(listed.toSorted()).toEqual(onDisk)
-	expect(new Set(listed).size).toBe(listed.length)
+	expect(new Set([...listed, ...retired]).size).toBe(
+		listed.length + retired.length,
+	)
+	// A retired entry is a file the harness stopped shipping, so none exists.
+	expect(
+		retired.filter((rel) => existsSync(path.join(templates, rel))),
+	).toEqual([])
+	expect(retired.length).toBeGreaterThan(0)
 })
 
-// Workflows are dogfooded by copy, like the skills; validate.yml differs on
+// The workflow is dogfooded by copy; validate.yml differs on
 // purpose (the harness clones no git dependency), so it is not compared.
 test('the merged-branch workflow is the same file the harness ships', async () => {
 	const rel = '.github/workflows/merged-branch.yml'
@@ -387,6 +564,47 @@ test('doctor reports whether the harness is installed in the repo itself', async
 		expect(doctor(root).find((i) => i.label === label)?.ok).toBe(true)
 		// The harness repo runs its hooks from source, so it passes without one.
 		expect(doctor(packageRoot).find((i) => i.label === label)?.ok).toBe(true)
+	} finally {
+		await rm(root, { recursive: true, force: true })
+	}
+})
+
+/** doctor's two plugin lines (decision 0009). */
+const pluginWiring = (items: ReturnType<typeof doctor>) =>
+	items.filter(
+		(i) => i.label.includes('reins plugin') || i.label.includes('marketplace'),
+	)
+
+test('doctor checks the Claude plugin wiring and the installed marketplace', async () => {
+	const root = await tmp('doctor-plugin')
+	try {
+		const wiring = pluginWiring
+		const before = wiring(doctor(root))
+		expect(before.map((i) => [i.ok, i.fix])).toEqual([
+			[false, 'npx reins sync'],
+			[false, 'npm install'],
+		])
+		await mkdir(path.join(root, '.claude'), { recursive: true })
+		await writeFile(
+			path.join(root, '.claude/settings.json'),
+			await readFile(
+				path.join(packageRoot, 'templates/.claude/settings.json'),
+				'utf8',
+			),
+		)
+		const installed = path.join(root, 'node_modules/@dom-kelly/reins')
+		await mkdir(path.join(installed, '.claude-plugin'), { recursive: true })
+		await writeFile(path.join(installed, 'package.json'), '{"version":"0.2.8"}')
+		const declared = wiring(doctor(root))
+		expect(declared[0]!.ok).toBe(true)
+		expect(declared[1]!.ok).toBe(false)
+		expect(declared[1]!.fix).toContain('npm update @dom-kelly/reins')
+		await writeFile(
+			path.join(installed, '.claude-plugin/marketplace.json'),
+			'{}',
+		)
+		expect(wiring(doctor(root)).every((i) => i.ok)).toBe(true)
+		expect(wiring(doctor(packageRoot)).every((i) => i.ok)).toBe(true)
 	} finally {
 		await rm(root, { recursive: true, force: true })
 	}

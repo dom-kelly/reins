@@ -83,6 +83,16 @@ export function formatAdoptReport(result: ReturnType<typeof adoptRepo>) {
 		`  written: ${result.report.written.length} file(s)`,
 		`  kept as-is (yours; sync will merge future template changes into them): ${result.report.kept.length} file(s)`,
 	]
+	if (result.report.removed.length) {
+		lines.push(
+			`  removed (the harness no longer ships them): ${result.report.removed.join(', ')}`,
+		)
+	}
+	if (result.report.retiredModified.length) {
+		lines.push(
+			`  RETIRED BUT EDITED LOCALLY (the harness owns these; delete the file, or keep your version under another name): ${result.report.retiredModified.join(', ')}`,
+		)
+	}
 	if (result.packageAdded.length) {
 		lines.push(`  package.json: added ${result.packageAdded.join(', ')}`)
 	}
@@ -92,6 +102,7 @@ export function formatAdoptReport(result: ReturnType<typeof adoptRepo>) {
 		'  1. npm install   (installs the harness, husky, lint-staged, prettier, oxlint if they were missing)',
 		'  2. add `npx reins check` to your validate/verify script',
 		'  3. .husky/* and .claude/settings.json call `npx reins hook …`; a lint-staged config in package.json is optional',
+		'     (.claude/settings.json also loads the reins plugin: open Claude Code here and accept the trust dialog so /reins:* appears)',
 		'  4. fill docs/contributing/architecture/primitives.yaml for your code (scan, unowned, floors, invariants)',
 		'  5. commit, including .reins/base/',
 	)

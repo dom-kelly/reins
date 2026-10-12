@@ -5,6 +5,7 @@ import {
 	readFileSync,
 	renameSync,
 	rmdirSync,
+	rmSync,
 	writeFileSync,
 } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -25,6 +26,9 @@ export type TemplateManifest = {
 	managed: Array<string>
 	/** Written once if absent; the product owns them afterwards. */
 	owned: Array<string>
+	/** Once managed, no longer shipped: sync and adopt delete a product's
+	 *  unedited copy (decision 0009 moved the skills into the plugin). */
+	retired?: Array<string>
 }
 
 export type TemplateVars = { name: string }
@@ -167,7 +171,60 @@ export function migrateLegacyNames(root: string): Array<string> {
 	return lines
 }
 
-export type ApplyReport = { written: Array<string>; kept: Array<string> }
+/** Deletes the retired files a product still carries. A copy that matches its
+ *  `.reins/base/` record goes, with the record and any directory left empty;
+ *  an edited copy stays and is reported, so nothing a product wrote is lost
+ *  silently. With `check`, reports only. */
+export function retireTemplates(
+	root: string,
+	retired: ReadonlyArray<string>,
+	{ baseFrom = baseDir, check = false } = {},
+) {
+	const removed: Array<string> = []
+	const retiredModified: Array<string> = []
+	const remove = (file: string) => {
+		if (check) return
+		rmSync(file)
+		// Prune the directories the file leaves empty, up to the repo root.
+		for (
+			let dir = path.dirname(file);
+			dir !== root && dir.startsWith(root);
+			dir = path.dirname(dir)
+		) {
+			try {
+				rmdirSync(dir)
+			} catch {
+				break // not empty
+			}
+		}
+	}
+	for (const rel of retired) {
+		const file = path.join(root, rel)
+		const base = path.join(root, baseFrom, rel)
+		const ours = readIfExists(file)
+		if (ours === undefined) {
+			if (existsSync(base)) remove(base)
+			continue
+		}
+		if (ours === readIfExists(base)) {
+			remove(file)
+			remove(base)
+			removed.push(rel)
+		} else {
+			retiredModified.push(rel)
+		}
+	}
+	return { removed, retiredModified }
+}
+
+export type ApplyReport = {
+	written: Array<string>
+	kept: Array<string>
+	/** Retired files deleted (they matched their base record). */
+	removed: Array<string>
+	/** Retired files left in place because the product edited them. */
+	retiredModified: Array<string>
+}
 
 /** new: overwrite everything. adopt: keep what exists, record it as managed. */
 export function applyTemplates(
@@ -182,7 +239,11 @@ export function applyTemplates(
 	},
 ): ApplyReport {
 	const manifest = loadManifest(templatesDir)
-	const report: ApplyReport = { written: [], kept: [] }
+	const report: ApplyReport = {
+		written: [],
+		kept: [],
+		...retireTemplates(root, manifest.retired ?? []),
+	}
 	for (const rel of manifest.managed) {
 		const rendered = render(
 			readFileSync(path.join(templatesDir, rel), 'utf8'),
@@ -222,6 +283,10 @@ export type SyncReport = {
 	merged: Array<string>
 	conflicts: Array<string>
 	unchanged: Array<string>
+	/** Retired files deleted (they matched their base record). */
+	removed: Array<string>
+	/** Retired files left in place because the product edited them. */
+	retiredModified: Array<string>
 }
 
 export function hasChanges(report: SyncReport) {
@@ -229,7 +294,8 @@ export function hasChanges(report: SyncReport) {
 		report.created.length +
 			report.updated.length +
 			report.merged.length +
-			report.conflicts.length >
+			report.conflicts.length +
+			report.removed.length >
 		0
 	)
 }
@@ -296,6 +362,8 @@ export async function syncTemplates(
 		merged: [],
 		conflicts: [],
 		unchanged: [],
+		removed: [],
+		retiredModified: [],
 	}
 	const write = (rel: string, content: string) => {
 		if (!check) writeFile(path.join(root, rel), content)
@@ -347,6 +415,10 @@ export async function syncTemplates(
 			report.created.push(rel)
 		}
 	}
+	Object.assign(
+		report,
+		retireTemplates(root, manifest.retired ?? [], { baseFrom, check }),
+	)
 	// Record which version these files now come from; doctor compares it.
 	const config = check ? undefined : readConfig(root)
 	if (config && config.harness !== packageVersion) {
@@ -365,6 +437,11 @@ export function formatSyncReport(report: SyncReport, check: boolean) {
 	section(`updated (no local edits)`, report.updated)
 	section(`merged (local edits kept)`, report.merged)
 	section(`CONFLICTS (resolve the markers)`, report.conflicts)
+	section(`removed (the harness no longer ships them)`, report.removed)
+	section(
+		`RETIRED BUT EDITED LOCALLY (the harness owns these; delete the file, or keep your version under another name)`,
+		report.retiredModified,
+	)
 	section(
 		`NO BASE RECORDED (run \`reins adopt\` to record one, then sync again)`,
 		report.missingBase,

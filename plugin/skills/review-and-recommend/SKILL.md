@@ -14,8 +14,8 @@ description: >
 2. Check the **evidence**: usage data, logs, or issues where they exist, for how
    many users hit this and how often. Say so when no data exists.
 3. Review the relevant code, docs, decision records, issues, and git history.
-   Check [decisions/index.md](../../../docs/contributing/decisions/index.md)
-   first — do not re-propose a recorded "no" unless its revisit-if is met.
+   Check `docs/contributing/decisions/index.md` first — do not re-propose a
+   recorded "no" unless its revisit-if is met.
 4. Present real options, numbered, each with effort (`Easy` · `Medium` · `Hard`)
    and a **one-way door** (hard to reverse) or **two-way door** (reversible)
    label. Note when an option could be made reversible (keeping old data, a kill

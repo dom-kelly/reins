@@ -14,6 +14,7 @@ template.
 - [0006 — The package and CLI are called reins; the harness stays the concept](./0006-named-reins.md)
 - [0007 — Releases are semver tags; products pin a range](./0007-versioned-by-tag.md)
 - [0008 — The harness owns the format and lint toolchain; the product keeps the rest](./0008-harness-owns-format-and-lint.md)
+- [0009 — Skills ship as a Claude Code plugin; products do not copy or edit them](./0009-skills-ship-as-a-plugin.md)
 
 ## Historical
 

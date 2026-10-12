@@ -1,0 +1,12 @@
+{
+	"name": "reins",
+	"description": "The reins harness: the workflows products run as /reins:<skill>",
+	"owner": { "name": "dom-kelly" },
+	"plugins": [
+		{
+			"name": "reins",
+			"source": "./plugin",
+			"description": "new-product, review-and-recommend, ship-pr and verify-app, loaded in place from node_modules/@dom-kelly/reins"
+		}
+	]
+}

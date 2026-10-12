@@ -16,7 +16,7 @@ import {
 	type PrimitivesMap,
 } from './primitives.ts'
 import { checkRepoRules } from './repo-rules.ts'
-import { findSkillIssues } from './skills.ts'
+import { findShadowedSkills, findSkillIssues } from './skills.ts'
 
 test('decision records reject duplicates and unindexed files', () => {
 	const issues = findDecisionIssues(
@@ -45,6 +45,15 @@ test('relative links are extracted; urls, anchors and html comments skipped', ()
 		extractRelativeLinks('[a](./x.md#h) [b](https://x.dev) [c](#top)'),
 	).toEqual([{ target: './x.md', line: 1 }])
 	expect(extractRelativeLinks('<!-- see [x](./missing.md) -->')).toEqual([])
+})
+
+test('a product skill named like a reins skill is flagged; others pass', () => {
+	const issues = findShadowedSkills(
+		['.claude/skills/ship-pr/SKILL.md', '.agents/skills/deploy/SKILL.md'],
+		['ship-pr', 'verify-app'],
+	)
+	expect(issues.map((i) => i.file)).toEqual(['.claude/skills/ship-pr/SKILL.md'])
+	expect(issues[0]!.message).toContain('/reins:ship-pr')
 })
 
 test('skills need matching name and a real description', () => {

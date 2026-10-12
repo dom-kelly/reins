@@ -9,11 +9,9 @@ description: >
 
 # Ship PR
 
-Authority comes from
-[shipping-policy.md](../../../docs/contributing/shipping-policy.md) and is
-enforced by `npx reins policy`. Never work around it. When the policy parks a PR
-for the owner, stop with everything ready, say which rule applied, and link the
-PR.
+Authority comes from `docs/contributing/shipping-policy.md` and is enforced by
+`npx reins policy`. Never work around it. When the policy parks a PR for the
+owner, stop with everything ready, say which rule applied, and link the PR.
 
 ## Loop
 
@@ -42,8 +40,8 @@ PR.
    `gh api repos/{owner}/{repo}/issues/<n>/comments --jq '.[].id'`), add the
    line, and write it back with
    `gh api -X PATCH repos/{owner}/{repo}/issues/comments/<id> -F body=@<file>`.
-5. **Verify (user-visible changes).** Use `verify-app` with realistic data and
-   record the evidence.
+5. **Verify (user-visible changes).** Use `/reins:verify-app` with realistic
+   data and record the evidence.
 6. **Describe.** Fill the PR template: Intent, Why, Summary, Testing (commands
    and results).
 7. **Leftovers.** Remove transitional code now. If something must wait for a
@@ -70,9 +68,8 @@ Repeat 2–8 until CI is green and valid review feedback is cleared.
 
 ## AI reviewers
 
-Installed as GitHub Apps (listed in
-[external-services.md](../../../docs/contributing/external-services.md)); they
-need no files in the repo.
+Installed as GitHub Apps (listed in `docs/contributing/external-services.md`);
+they need no files in the repo.
 
 - **Cursor Bugbot** is the primary reviewer. Trigger it by commenting
   `bugbot run` on the PR, or enable automatic runs in the Cursor dashboard.
@@ -87,9 +84,8 @@ need no files in the repo.
   `Fixed in <sha>: <what changed>`. For wrong claims, nits, and already-fixed
   items, reply on the thread with the reason.
 - **Promote repeats.** If a finding is the second of its kind (check
-  [gotchas.md](../../../docs/contributing/gotchas.md) and earlier PR threads),
-  encode it in this PR: a checker or test first, a gotcha line only if no cheap
-  checker exists.
+  `docs/contributing/gotchas.md` and earlier PR threads), encode it in this PR:
+  a checker or test first, a gotcha line only if no cheap checker exists.
 
 ## Gates are not CI
 
@@ -98,7 +94,7 @@ not sleep-poll.
 
 ## Wrap-up
 
-- Add any new trap to [gotchas.md](../../../docs/contributing/gotchas.md).
+- Add any new trap to `docs/contributing/gotchas.md`.
 - Final summary to the owner:
   - a human headline of the change (not "ship repo#12");
   - risk, difficulty (Easy/Medium/Hard), status (Shipped / Ready / Blocked);
