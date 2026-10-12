@@ -46,10 +46,22 @@ Node refuses to strip TypeScript types for files under `node_modules`, so the
 package ships compiled JavaScript: `npm install` here (and a product's install
 from git) runs `scripts/prepare.mjs`, which builds `dist/`. Run the CLI from
 source while developing (`node bin/reins.ts …`); `dist/` is gitignored and
-rebuilt by `npm run build`. The e2e lane (`npm run test:e2e`) packs the package,
-scaffolds a product, installs the tarball into it and runs the product's own
-`validate`; it is the only check that exercises the package as installed,
-because `npm link` resolves outside `node_modules` and hides the restriction.
+rebuilt by `npm run build`. The e2e lanes (`npm run test:e2e`) are the only
+checks that exercise the package as installed, because `npm link` resolves
+outside `node_modules` and hides the restriction. Each scaffolds a product and
+runs the product's own `validate`:
+
+- the **tarball** lane packs the package and installs the `.tgz`, which proves
+  the `files` list, the bin path and the Claude hook before and after install;
+- the **git** lane installs `git+file://<this checkout>#<HEAD>`, which follows a
+  product's install: npm fetches the commit into a temp dir with no `dist/` and
+  no `node_modules`, installs the devDependencies there, runs
+  `scripts/prepare.mjs` and packs the result. A missing devDependency or a
+  prepare that expects an existing build only fails here. npm takes HEAD, so
+  uncommitted changes are not exercised; commit before trusting it. Two things
+  still differ from a product: the spec pins a sha, so `#semver:` tag resolution
+  is not covered, and for GitHub npm downloads the commit's tarball (no `.git`,
+  so the husky branch of prepare is skipped) rather than cloning.
 
 ## Releasing
 

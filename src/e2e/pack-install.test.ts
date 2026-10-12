@@ -1,8 +1,9 @@
-import { spawnSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { expect, test } from 'vitest'
 import { packageRoot } from '../lib/repo.ts'
 
@@ -94,6 +95,67 @@ test('a product built from the packed package passes its own validate', async ()
 		expect(installed.status, installed.stderr).toBe(2)
 		expect(installed.stderr).toContain('Pushing straight to main')
 		expect(installed.stderr).not.toContain('did not run')
+	} finally {
+		await rm(dir, { recursive: true, force: true })
+	}
+})
+
+// Products install from a git URL, not a tarball: npm fetches the repo at the
+// resolved commit into a temp dir with no dist/ and no node_modules (a clone
+// here; for GitHub, the tarball of the commit, so no .git), installs the
+// devDependencies there, runs scripts/prepare.mjs (twice: on that install and
+// again when it packs) and packs what is left. A devDependency missing from
+// package.json or a prepare that expects an existing build fails only on this
+// path. npm takes HEAD, so uncommitted changes are not exercised (the pre-push
+// hook tests the working tree, not the pushed commits; commit first). Semver
+// tag resolution is not exercised either: the spec pins the sha.
+test('a product that installs the package from git passes its own validate', async () => {
+	const dir = await mkdtemp(path.join(tmpdir(), 'harness-e2e-git-'))
+	try {
+		// Scaffold with the built CLI as a product would. Always rebuild: a
+		// dist/ left by another branch would scaffold from the wrong source.
+		const build = run('npm', ['run', '-s', 'build'], packageRoot)
+		expect(build.code, build.out).toBe(0)
+		const cli = path.join(packageRoot, 'dist/bin/reins.js')
+		const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
+			cwd: packageRoot,
+			encoding: 'utf8',
+		}).trim()
+
+		const product = path.join(dir, 'demo-product')
+		const created = run(
+			'node',
+			[cli, 'new', product, '--no-install', '--no-git'],
+			dir,
+		)
+		expect(created.code, created.out).toBe(0)
+
+		const pkgFile = path.join(product, 'package.json')
+		const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'))
+		// A file URL, so a checkout path with a space or # still parses.
+		pkg.devDependencies['@dom-kelly/reins'] =
+			`git+${pathToFileURL(packageRoot).href}#${sha}`
+		writeFileSync(pkgFile, `${JSON.stringify(pkg, null, '\t')}\n`)
+
+		// npm folds the clone's install and prepare output into its own error
+		// output, so the whole output is the failure message.
+		const install = run('npm', ['install', '--no-audit', '--no-fund'], product)
+		expect(install.code, `npm install from git failed:\n${install.out}`).toBe(0)
+		const installedCli = path.join(
+			product,
+			'node_modules/@dom-kelly/reins/dist/bin/reins.js',
+		)
+		expect(
+			existsSync(installedCli),
+			'prepare in the clone should have built dist/',
+		).toBe(true)
+
+		const helpText = run('npx', ['reins', '--help'], product)
+		expect(helpText.code, helpText.out).toBe(0)
+		expect(helpText.out).toContain('reins sync')
+
+		const validate = run('npm', ['run', '-s', 'validate'], product)
+		expect(validate.code, validate.out).toBe(0)
 	} finally {
 		await rm(dir, { recursive: true, force: true })
 	}

@@ -4,6 +4,12 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.2.1] - 2026-10-12
+
+- A git-install e2e lane: a product now also installs the package the way
+  products do, from a git URL, so npm's clone, the devDependency install and
+  `scripts/prepare.mjs` in that clone are exercised, not only the tarball.
+
 ## [0.2.0] - 2026-10-12
 
 - Versioning: a change to shipped code must bump the version and add an entry
