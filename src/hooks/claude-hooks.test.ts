@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { existsSync } from 'node:fs'
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
 import { expect, test, vi } from 'vitest'
 import {
@@ -33,6 +34,98 @@ test('an npm script run by a hook does not inherit GIT_DIR', async () => {
 		await rm(root, { recursive: true, force: true })
 	}
 })
+
+const nvmInstalled = existsSync(
+	path.join(process.env.NVM_DIR ?? path.join(homedir(), '.nvm'), 'nvm.sh'),
+)
+
+/** Runs `fn` with these variables set in process.env (undefined = unset),
+ *  restoring the originals afterwards. */
+async function withEnv(
+	vars: Record<string, string | undefined>,
+	fn: () => Promise<void>,
+) {
+	const saved = Object.fromEntries(
+		Object.keys(vars).map((k) => [k, process.env[k]]),
+	)
+	for (const [k, v] of Object.entries(vars))
+		if (v === undefined) delete process.env[k]
+		else process.env[k] = v
+	try {
+		await fn()
+	} finally {
+		for (const [k, v] of Object.entries(saved))
+			if (v === undefined) delete process.env[k]
+			else process.env[k] = v
+	}
+}
+
+// Claude Code runs the hooks through `npx reins hook …`, and npm exports its
+// config to what it runs: the hook arrives with npm_config_prefix set to the
+// prefix of whatever Node ran npx. When that Node is not nvm's (Homebrew's,
+// say), nvm refuses to switch and, before this test, the hook silently ran the
+// product's gate on the wrong Node (rollup: "Cannot find module
+// @rollup/rollup-darwin-x64" under an x64 Node 23 on an arm64 Mac). A `node`
+// shim first on PATH stands in for that wrong Node, on a PATH with no nvm bin
+// in it (a session that never ran `nvm use`; given one, nvm edits that entry
+// in place instead of prepending): only a successful switch puts nvm's bin
+// ahead of the shim. Needs nvm, so the lane without it (CI) skips.
+test.skipIf(!nvmInstalled)(
+	'a hook runs the Node in .nvmrc even when npm exported a prefix outside nvm',
+	async () => {
+		const root = await mkdtemp(path.join(tmpdir(), 'harness-hook-nvm-'))
+		const shim = path.join(root, 'shim')
+		const prefix = path.join(root, 'prefix')
+		const major = process.versions.node.split('.')[0]!
+		try {
+			await mkdir(shim)
+			await mkdir(prefix)
+			await writeFile(path.join(shim, 'node'), '#!/bin/sh\necho shim\n')
+			await chmod(path.join(shim, 'node'), 0o755)
+			await writeFile(
+				path.join(root, 'package.json'),
+				JSON.stringify({ scripts: { show: 'node -p process.version' } }),
+			)
+			const nvmDir = process.env.NVM_DIR ?? path.join(homedir(), '.nvm')
+			const pathWithoutNvm = (process.env.PATH ?? '')
+				.split(path.delimiter)
+				.filter((dir) => !dir.startsWith(`${nvmDir}${path.sep}`))
+			await withEnv(
+				{
+					npm_config_prefix: prefix,
+					NVM_BIN: undefined,
+					NVM_INC: undefined,
+					PATH: [shim, ...pathWithoutNvm].join(path.delimiter),
+				},
+				async () => {
+					// Without .nvmrc nothing is switched, so the shim is the Node.
+					let run = runNpmScript(root, 'show')
+					expect(run.status, run.output).toBe(0)
+					expect(run.output).toContain('shim')
+
+					// The test's own major is installed in nvm (it is running it).
+					await writeFile(path.join(root, '.nvmrc'), `${major}\n`)
+					run = runNpmScript(root, 'show')
+					expect(run.status, run.output).toBe(0)
+					expect(run.output).toContain(`v${major}.`)
+					expect(run.output).not.toContain('shim')
+
+					// A Node nvm does not have: the script does not run on the
+					// shim; the hook says what nvm said.
+					await writeFile(path.join(root, '.nvmrc'), '999\n')
+					run = runNpmScript(root, 'show')
+					expect(run.status, run.output).toBe(2)
+					expect(run.output).toMatch(
+						/nvm could not select the Node in \.nvmrc, so npm run show did not run: .*999/,
+					)
+					expect(run.output).not.toContain('shim')
+				},
+			)
+		} finally {
+			await rm(root, { recursive: true, force: true })
+		}
+	},
+)
 
 /** A dirty repo with trivial scripts, so the Stop hook has something to run. */
 async function dirtyRepo(

@@ -60,6 +60,12 @@ When a mistake repeats, encode it in the strongest cheap guardrail that works:
 
 Rule of thumb: if a reviewer makes the same comment twice, encode it.
 
+A papercut that belongs to the harness (a hook, check, skill or template that
+reins ships) is not this repo's to encode: open an issue on
+[dom-kelly/reins](https://github.com/dom-kelly/reins/issues) labelled
+`friction`, with the command, the output and what you expected, rather than
+working around it here.
+
 ## Checkers in `validate`
 
 | Lane                   | Catches                                                                                      |

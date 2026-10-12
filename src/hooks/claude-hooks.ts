@@ -4,42 +4,63 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import { readConfig, type HarnessConfig } from '../lib/config.ts'
 
-/** Git exports GIT_DIR (absolute in a worktree) to its hooks. A script that
- *  then runs git in another directory, as a test fixture does, would act on
- *  the developer's repo instead; drop the variables so git finds the repo from
- *  its cwd. */
-function withoutGitEnv(env = process.env) {
+/** The environment an npm script run by a hook gets. Two things the hook's
+ *  own process inherits must not reach it:
+ *  - Git exports GIT_DIR (absolute in a worktree) to its hooks. A script that
+ *    then runs git in another directory, as a test fixture does, would act on
+ *    the developer's repo instead; without it git finds the repo from its cwd.
+ *  - npm exports its config to whatever it runs, so `npx reins hook …` arrives
+ *    with npm_config_prefix set to the prefix of the Node that ran npx. nvm
+ *    refuses `nvm use` when that prefix is outside NVM_DIR (a Homebrew Node,
+ *    say), which is exactly the Node the switch below exists to get away from. */
+function hookEnv(env = process.env) {
 	const clean = { ...env }
 	for (const key of [
 		'GIT_DIR',
 		'GIT_WORK_TREE',
 		'GIT_INDEX_FILE',
 		'GIT_PREFIX',
+		'npm_config_prefix',
+		'NPM_CONFIG_PREFIX',
+		'PREFIX',
 	])
 		delete clean[key]
 	return clean
 }
 
-/** Runs an npm script with the Node from .nvmrc when nvm is installed: hooks
- *  inherit the shell's default Node, which may not be the one the project's
- *  native bindings were built for. Returns { status, output }. */
+/** Runs an npm script with the Node from .nvmrc when the repo has one and nvm
+ *  is installed: hooks inherit the shell's default Node, which may not be the
+ *  one the project's native bindings were built for. When nvm cannot select
+ *  that Node the script does not run and the output says why; running it with
+ *  whatever Node is on PATH would fail later with a misleading error (a
+ *  missing native binding) or, worse, pass. Returns { status, output }. */
 export function runNpmScript(root: string, script: string) {
 	const nvm = path.join(
 		process.env.NVM_DIR ?? path.join(homedir(), '.nvm'),
 		'nvm.sh',
 	)
-	const options = { cwd: root, encoding: 'utf8', env: withoutGitEnv() } as const
-	const result = existsSync(nvm)
-		? spawnSync(
-				'bash',
-				[
-					'-c',
-					`. "${nvm}" >/dev/null 2>&1; nvm use --silent >/dev/null 2>&1; npm run -s "$0"`,
-					script,
-				],
-				options,
-			)
-		: spawnSync('npm', ['run', '-s', script], options)
+	const options = { cwd: root, encoding: 'utf8', env: hookEnv() } as const
+	const result =
+		existsSync(nvm) && existsSync(path.join(root, '.nvmrc'))
+			? spawnSync(
+					'bash',
+					[
+						'-c',
+						// nvm's messages go to stdout, its errors to stderr: keep
+						// only the errors, for the message.
+						[
+							`. "${nvm}" >/dev/null 2>&1`,
+							'if ! why=$(nvm use 2>&1 >/dev/null); then',
+							'  echo "nvm could not select the Node in .nvmrc, so npm run $0 did not run: $why" >&2',
+							'  exit 2',
+							'fi',
+							'npm run -s "$0"',
+						].join('\n'),
+						script,
+					],
+					options,
+				)
+			: spawnSync('npm', ['run', '-s', script], options)
 	return {
 		status: result.status ?? 1,
 		output: `${result.stdout ?? ''}${result.stderr ?? ''}`,

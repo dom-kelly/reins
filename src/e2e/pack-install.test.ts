@@ -57,7 +57,12 @@ test('a product built from the packed package passes its own validate', async ()
 		// (exit 2) and say why, not fail quietly or fetch `reins` from npm.
 		const settings = JSON.parse(
 			readFileSync(path.join(product, '.claude/settings.json'), 'utf8'),
-		) as { hooks: { PreToolUse: Array<{ hooks: Array<{ command: string }> }> } }
+		) as {
+			hooks: Record<
+				'PreToolUse' | 'PostToolUse',
+				Array<{ hooks: Array<{ command: string }> }>
+			>
+		}
 		const guardCommand = settings.hooks.PreToolUse[0]!.hooks[0]!.command
 		const uninstalled = runGuard(guardCommand, product, dir)
 		expect(uninstalled.status, uninstalled.stderr).toBe(2)
@@ -140,6 +145,24 @@ test('a product built from the packed package passes its own validate', async ()
 		expect(installed.status, installed.stderr).toBe(2)
 		expect(installed.stderr).toContain('Pushing straight to main')
 		expect(installed.stderr).not.toContain('did not run')
+
+		// The typecheck hook the same way, with npm's prefix outside nvm as it
+		// is when the session's Node is not nvm's: the product's typecheck must
+		// run (on the Node in .nvmrc) and pass, not be skipped or refused.
+		const typecheckCommand = settings.hooks.PostToolUse[0]!.hooks[0]!.command
+		const edited = (await readdir(path.join(product, 'src'))).find((f) =>
+			f.endsWith('.ts'),
+		)!
+		const typecheck = spawnSync('sh', ['-c', typecheckCommand], {
+			cwd: product,
+			encoding: 'utf8',
+			input: JSON.stringify({
+				tool_input: { file_path: path.join(product, 'src', edited) },
+			}),
+			env: { ...process.env, npm_config_prefix: dir },
+		})
+		expect(typecheck.status, `${typecheck.stdout}\n${typecheck.stderr}`).toBe(0)
+		expect(typecheck.stdout).toBe('')
 	} finally {
 		await rm(dir, { recursive: true, force: true })
 	}

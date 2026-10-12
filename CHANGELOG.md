@@ -4,6 +4,23 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.4.2] - 2026-10-12
+
+- The Claude hooks (`typecheck`, `validate-on-stop`) run the product's scripts
+  on the Node in `.nvmrc` again when the session's Node is not nvm's. npm
+  exports its config to what it runs, so `npx reins hook …` arrived with
+  `npm_config_prefix` set to that Node's prefix, nvm refused `nvm use` because
+  the prefix was outside `NVM_DIR`, and the hook silently ran the gate on the
+  wrong Node (rollup: "Cannot find module `@rollup/rollup-darwin-x64`" under a
+  Homebrew x64 Node 23 on an arm64 Mac). The hook now drops the npm prefix
+  variables before sourcing nvm, only consults nvm when the repo has an
+  `.nvmrc`, and when nvm still cannot select that Node it exits 2 with nvm's
+  message instead of running with whatever is on PATH. A unit test runs the
+  switch against a `node` shim and a prefix outside nvm; the tarball e2e lane
+  runs the typecheck hook command as Claude Code does with such a prefix.
+- The product harness-engineering doc routes a papercut owned by the harness to
+  a `friction` issue on dom-kelly/reins instead of a workaround in the product.
+
 ## [0.4.1] - 2026-10-12
 
 - Docs brought back in line with the code. Product docs: the shipping policy
