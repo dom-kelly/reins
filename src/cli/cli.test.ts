@@ -353,6 +353,28 @@ test('doctor: an info item never fails the run and prints as a note', async () =
 	}
 })
 
+test('doctor suggests a fast stop gate when the merge gate is not validate', async () => {
+	const root = await tmp('doctor-stop-gate')
+	try {
+		const item = () =>
+			doctor(root).find((i) => i.label.startsWith('the Stop hook runs'))
+		const base = { harness: packageVersion, product: { name: 'x' } }
+		writeConfig(root, { ...base, policy: { gate: 'validate' } })
+		expect(item()).toBeUndefined()
+		writeConfig(root, { ...base, policy: { gate: 'verify' } })
+		expect(item()).toMatchObject({ ok: false, info: true })
+		expect(item()?.label).toContain('(verify)')
+		writeConfig(root, {
+			...base,
+			policy: { gate: 'verify' },
+			hooks: { stopGate: 'verify:quick' },
+		})
+		expect(item()).toBeUndefined()
+	} finally {
+		await rm(root, { recursive: true, force: true })
+	}
+})
+
 test('doctor asks for a sync when reins.json was synced from another version', async () => {
 	const root = await tmp('doctor-version')
 	try {

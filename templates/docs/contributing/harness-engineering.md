@@ -82,6 +82,12 @@ place are in [growth.md](./growth.md).
   blocks force-pushes, `--no-verify`, `git reset --hard`, `git clean -f`, and a
   `gh pr merge` without `--delete-branch`, with a message saying what to do
   instead.
+- The Stop hook runs `hooks.stopGate` from `reins.json` (default: the gate,
+  `policy.gate`) whenever the working tree is dirty, and sends the agent back to
+  fix a failure. It has a 300 second budget and a timeout does not block, so a
+  product whose gate is slow (builds, end-to-end tests) points it at a fast
+  script instead, for example a `verify:quick` that runs checks, lint, typecheck
+  and unit tests. The merge gate stays complete; the stop gate stays fast.
 - The guard and typecheck hooks refuse to run (exit 2) when the harness is not
   installed, so an uninstalled harness blocks rather than silently allows;
   `npm install` fixes it. The Stop hook only warns, since an agent cannot repair

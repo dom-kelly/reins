@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
-import { readConfig } from '../lib/config.ts'
+import { readConfig, type HarnessConfig } from '../lib/config.ts'
 
 /** Git exports GIT_DIR (absolute in a worktree) to its hooks. A script that
  *  then runs git in another directory, as a test fixture does, would act on
@@ -75,9 +75,15 @@ export function runTypecheckHook(
 	return 2
 }
 
-/** Stop: when the working tree has changes, the gate must pass before the
- *  agent finishes. A second refusal in a row lets it stop and report instead
- *  of looping. */
+/** The script the Stop hook runs: `hooks.stopGate` when a product's merge
+ *  gate is too slow for the hook's budget, else the gate itself. */
+export function stopGateScript(config: HarnessConfig | undefined) {
+	return config?.hooks?.stopGate ?? config?.policy?.gate ?? 'validate'
+}
+
+/** Stop: when the working tree has changes, the stop gate must pass before
+ *  the agent finishes. A second refusal in a row lets it stop and report
+ *  instead of looping. */
 export function runGateOnStopHook(
 	root: string,
 	input = readFileSync(0, 'utf8'),
@@ -94,8 +100,15 @@ export function runGateOnStopHook(
 		return 0
 	}
 	if (!dirty.trim()) return 0
-	const gate = readConfig(root)?.policy?.gate ?? 'validate'
-	if (!hasScript(root, gate)) return 0
+	const gate = stopGateScript(readConfig(root))
+	if (!hasScript(root, gate)) {
+		// Not a block (nothing to run), but say so: a misconfigured stop gate
+		// must not be invisible.
+		console.error(
+			`validate-on-stop: no "${gate}" script in package.json, so nothing ran (set hooks.stopGate or policy.gate in reins.json)`,
+		)
+		return 0
+	}
 	const { status, output } = runNpmScript(root, gate)
 	if (status === 0) return 0
 	console.error(

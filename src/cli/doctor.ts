@@ -88,6 +88,16 @@ export function doctor(root: string): Array<Item> {
 	]
 	const autoDelete = gh.status === 0 ? autoDeleteItem(root) : undefined
 	if (autoDelete) items.push(autoDelete)
+	// The Stop hook has a 300 second budget and fails open on a timeout, so a
+	// gate slower than `validate` wants a fast stop gate of its own.
+	const gate = config?.policy?.gate
+	if (gate && gate !== 'validate' && !config?.hooks?.stopGate)
+		items.push({
+			label: `the Stop hook runs the merge gate (${gate}); a slow gate times out and fails open`,
+			ok: false,
+			fix: 'set hooks.stopGate in reins.json to a script that finishes in about a minute',
+			info: true,
+		})
 	return items
 }
 
