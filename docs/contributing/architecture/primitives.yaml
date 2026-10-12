@@ -92,6 +92,8 @@ primitives:
     code:
       - templates
       - scaffold
+      # The repo's own copy of a template, kept identical by a test.
+      - .github/workflows/merged-branch.yml
     docs:
       - docs/contributing/developing.md
 

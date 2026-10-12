@@ -37,6 +37,13 @@ Always: not a draft, targets `main`, no test file deleted, no other check red or
 pending (except `reviewers.ignoreChecks`). `gh pr merge --admin|--auto` and
 merging through the API are refused outright.
 
+## After merge
+
+The head branch does not outlive the PR: the guard requires `--delete-branch` on
+`gh pr merge`, and the merged-branch workflow
+(`.github/workflows/merged-branch.yml`) deletes the branch of any merged PR,
+however it was merged.
+
 ## Where the policy reads from
 
 `reins.json` and `primitives.yaml` are read from `origin/main`, never from the

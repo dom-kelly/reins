@@ -9,6 +9,7 @@
 		".claude/skills/verify-app/SKILL.md",
 		".github/pull_request_template.md",
 		".github/workflows/validate.yml",
+		".github/workflows/merged-branch.yml",
 		".husky/pre-commit",
 		".husky/pre-push",
 		".nvmrc",

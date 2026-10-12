@@ -5,7 +5,37 @@ import { checkNodeVersion } from '../checks/node-version.ts'
 import { packageVersion, readConfig } from '../lib/config.ts'
 import { packageRoot } from '../lib/repo.ts'
 
-type Item = { label: string; ok: boolean; fix: string }
+type Item = {
+	label: string
+	ok: boolean
+	fix: string
+	/** Worth knowing, not a failure: doctor still exits 0. */
+	info?: boolean
+}
+
+/** Whether GitHub itself deletes a merged PR's head branch, read from the
+ *  repo's origin. The merged-branch workflow deletes it either way, so this
+ *  only informs; with no gh, no GitHub origin or no access there is no line. */
+function autoDeleteItem(root: string): Item | undefined {
+	// gh would read GH_REPO before the cwd's origin; this is about this repo.
+	const env = { ...process.env }
+	delete env.GH_REPO
+	const result = spawnSync(
+		'gh',
+		['api', 'repos/{owner}/{repo}', '-q', '.delete_branch_on_merge'],
+		{ cwd: root, env, encoding: 'utf8', timeout: 10_000 },
+	)
+	if (result.status !== 0) return undefined
+	const on = result.stdout.trim() === 'true'
+	return {
+		label: on
+			? 'GitHub deletes merged branches itself (delete_branch_on_merge)'
+			: 'GitHub does not delete merged branches itself; the merged-branch workflow does',
+		ok: on,
+		fix: 'gh repo edit --delete-branch-on-merge',
+		info: true,
+	}
+}
 
 /** What a fresh session needs to know before doing anything. */
 export function doctor(root: string): Array<Item> {
@@ -13,7 +43,7 @@ export function doctor(root: string): Array<Item> {
 	const nodeIssue = checkNodeVersion(root)
 	// `gh auth token` is local and reflects the active account; `gh auth status` fails on any stale secondary account.
 	const gh = spawnSync('gh', ['auth', 'token'], { encoding: 'utf8' })
-	return [
+	const items: Array<Item> = [
 		{
 			label: `node matches .nvmrc (have ${process.versions.node})`,
 			ok: nodeIssue === undefined,
@@ -56,10 +86,19 @@ export function doctor(root: string): Array<Item> {
 			fix: 'gh auth login',
 		},
 	]
+	const autoDelete = gh.status === 0 ? autoDeleteItem(root) : undefined
+	if (autoDelete) items.push(autoDelete)
+	return items
+}
+
+export function doctorPassed(items: ReadonlyArray<Item>) {
+	return items.every((i) => i.ok || i.info)
 }
 
 export function formatDoctor(items: ReadonlyArray<Item>) {
 	return items
-		.map((i) => (i.ok ? `✅ ${i.label}` : `❌ ${i.label} → ${i.fix}`))
+		.map((i) =>
+			i.ok ? `✅ ${i.label}` : `${i.info ? 'ℹ️' : '❌'} ${i.label} → ${i.fix}`,
+		)
 		.join('\n')
 }
