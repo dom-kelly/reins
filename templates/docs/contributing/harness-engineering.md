@@ -77,11 +77,19 @@ place are in [growth.md](./growth.md).
 
 `.claude/settings.json` applies to every Claude Code session in this repo:
 
-- `git push` and `gh pr merge` always ask the owner.
-- A PreToolUse hook (`the harness guard hook (`npx reins hook guard-bash`)`)
-  blocks force-pushes, `--no-verify`, `git reset --hard`, `git clean -f`, and a
-  `gh pr merge` without `--delete-branch`, with a message saying what to do
-  instead.
+- A PreToolUse hook on Bash, the harness guard (`npx reins hook guard-bash`),
+  refuses force-pushes (`--force`, `-f`, `--force-with-lease`), a push to `main`
+  or `master`, `--no-verify` on commit or push, `git reset --hard` and
+  `git clean -f`, `gh pr merge --admin` or `--auto`, a merge through the API or
+  in another repo, and a `gh pr merge` without `--delete-branch`, each with a
+  message saying what to do instead. `guard.blocked` in `reins.json` adds
+  product-specific patterns.
+- On any other `gh pr merge` the guard runs the
+  [shipping policy](./shipping-policy.md) (`npx reins policy <pr>`) and lets the
+  merge through only when it passes; otherwise it prints what the policy is
+  waiting for (a reviewer, an unanswered finding, or the owner). The harness
+  holds neither a branch push nor an in-policy merge for the owner; the policy
+  involves the owner only where `policy.authority` says so.
 - The Stop hook runs `hooks.stopGate` from `reins.json` (default: the gate,
   `policy.gate`) whenever the working tree is dirty, and sends the agent back to
   fix a failure. It has a 300 second budget and a timeout does not block, so a
@@ -98,9 +106,9 @@ place are in [growth.md](./growth.md).
   `npm install` fixes it. The Stop hook only warns, since an agent cannot repair
   a hook that will not run.
 
-Git hooks (`.husky/`) format staged files on commit and run typecheck and tests
-on push, skipping them for docs-only diffs. They apply to any agent, not only
-Claude Code.
+Git hooks (`.husky/`) check the Node version, format staged files on commit, run
+the `reins check` lanes, and for non-docs diffs typecheck (on commit and push)
+and run the tests (on push). They apply to any agent, not only Claude Code.
 
 ## Growth
 

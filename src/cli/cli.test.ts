@@ -20,7 +20,7 @@ import {
 	readConfig,
 	writeConfig,
 } from '../lib/config.ts'
-import { packageRoot } from '../lib/repo.ts'
+import { listFiles, packageRoot } from '../lib/repo.ts'
 import {
 	applyTemplates,
 	baseDir,
@@ -213,6 +213,58 @@ test('the harness uses the same skills it ships (copies, not a symlink)', async 
 			`${rel} differs: cp -R templates/.claude/skills .claude/`,
 		).toBe(await readFile(path.join(templateSkills, rel), 'utf8'))
 	}
+})
+
+/** Wording that was once true and is now wrong. The link and decision checks
+ *  do not see this kind of drift, so each phrase here was found by a review
+ *  after it had shipped. Add a phrase when a doc is corrected; the reason says
+ *  what replaced it. */
+const retiredPhrases: ReadonlyArray<{ phrase: string; why: string }> = [
+	{ phrase: 'npx harness', why: 'the bin is `reins` (decision 0006)' },
+	{ phrase: 'harness.json', why: 'the config is `reins.json` (decision 0006)' },
+	{
+		phrase: '.harness/',
+		why: 'base copies live under `.reins/` (decision 0006)',
+	},
+	{
+		phrase: 'always ask the owner',
+		why: 'the guard refuses pushes to main and runs the policy on merge; the prompts went with decision 0005',
+	},
+	{
+		phrase: 'licence is unstated',
+		why: 'kody is FSL-1.1-ALv2 (docs/contributing/gotchas.md)',
+	},
+	{
+		phrase: '(`npx harness hook ',
+		why: 'a nested-backtick fragment that once mangled the guardrails bullet',
+	},
+]
+// A record of the rename has to quote the old names; nothing else may.
+const retiredPhraseExemptions: Record<string, ReadonlyArray<string>> = {
+	'docs/contributing/decisions/0006-named-reins.md': [
+		'npx harness',
+		'harness.json',
+		'.harness/',
+	],
+}
+
+test('retired phrases do not reappear in shipped or repo docs', async () => {
+	const files = ['README.md', 'CLAUDE.md']
+	for (const dir of ['templates', 'docs']) {
+		files.push(...(await listFiles(packageRoot, dir, (f) => f.endsWith('.md'))))
+	}
+	expect(files.length).toBeGreaterThan(10)
+	const found: Array<string> = []
+	for (const file of files) {
+		const source = await readFile(path.join(packageRoot, file), 'utf8')
+		const allowed = retiredPhraseExemptions[file] ?? []
+		for (const { phrase, why } of retiredPhrases) {
+			if (!allowed.includes(phrase) && source.includes(phrase)) {
+				found.push(`${file}: "${phrase}" is retired; ${why}`)
+			}
+		}
+	}
+	expect(found).toEqual([])
 })
 
 // A template that is in neither list is never written, so it would ship to

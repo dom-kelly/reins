@@ -14,9 +14,9 @@ kebab-case slug. Half a page is enough.
 
 Do not write a record for every PR, for UI tweaks, or for a library choice the
 code already makes obvious. A record is written **after** the decision; it is
-not a design brief for a PR. `npm run docs:check-decisions` rejects duplicate
-numbers, a heading number that does not match the filename, and records missing
-from this index.
+not a design brief for a PR. `npx reins check` (one lane of `validate`) rejects
+duplicate numbers, a heading number that does not match the filename, and
+records missing from this index.
 
 When a later record changes a decision, mark the old one `superseded by NNNN`
 instead of editing or deleting it.
