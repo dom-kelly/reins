@@ -4,6 +4,14 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.2.3] - 2026-10-12
+
+- The Stop hook has its own gate: `hooks.stopGate` in `reins.json` names the npm
+  script it runs (default: `policy.gate`), so a product whose merge gate is slow
+  can keep a fast stop gate instead of timing out and failing open. A missing
+  script now shows the user a notice naming it instead of silently passing, and
+  `reins doctor` suggests a stop gate when the merge gate is not `validate`.
+
 ## [0.2.2] - 2026-10-12
 
 - A merged PR's head branch no longer outlives it: a managed workflow

@@ -31,6 +31,13 @@ export type HarnessConfig = {
 		/** Extra Bash patterns the guard hook refuses (regex source + reason). */
 		blocked?: Array<{ pattern: string; reason: string }>
 	}
+	hooks?: {
+		/** The npm script the Claude Code Stop hook runs when the tree is dirty.
+		 *  Defaults to `policy.gate`. Keep it under about a minute: the hook has
+		 *  a 300 second budget and a timeout does not block, so a slow gate fails
+		 *  open on exactly the runs that matter. */
+		stopGate?: string
+	}
 	/** Who may merge at each risk tier and which reviewers must have spoken. */
 	policy?: PolicyConfig
 }

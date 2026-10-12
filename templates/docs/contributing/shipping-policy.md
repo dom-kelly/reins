@@ -73,8 +73,13 @@ enforcement ladder in [harness-engineering.md](./harness-engineering.md).
 		"required": ["coderabbitai", "devin-ai-integration"],
 		"ignoreChecks": ["CodeRabbit"]
 	}
-}
+},
+"hooks": { "stopGate": "validate" }
 ```
+
+`hooks.stopGate` is what the Claude Code Stop hook runs; it defaults to
+`policy.gate` and should finish in about a minute
+([harness-engineering.md](./harness-engineering.md), agent guardrails).
 
 With no `reviewers`, medium and high need only the gate; add reviewers as the
 GitHub Apps are installed ([external-services.md](./external-services.md)).
