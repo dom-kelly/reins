@@ -345,6 +345,35 @@ test('Claude hook commands fail closed when the harness is not installed', async
 	}
 })
 
+// The husky lines take the same precaution; npx's own message for a missing
+// package ("'reins@*' is not in this registry") points at the wrong place,
+// so the line names the fix, but only when the bin really is absent, so a
+// failed hook is not mislabelled.
+test('every `npx reins hook` a template ships carries --no-install', async () => {
+	for (const hook of ['pre-commit', 'pre-push']) {
+		expect(
+			await readFile(path.join(packageRoot, 'templates/.husky', hook), 'utf8'),
+		).toBe(
+			`npx --no-install reins hook ${hook} || { [ -x node_modules/.bin/reins ] || echo 'reins is not installed: run npm install' >&2; exit 1; }\n`,
+		)
+	}
+	// Prose may name the command; anything that runs it must not install it.
+	const files = await listFiles(
+		packageRoot,
+		'templates',
+		(f) => !f.endsWith('.md'),
+	)
+	expect(files.length).toBeGreaterThan(3)
+	const bare: Array<string> = []
+	for (const file of files) {
+		const source = await readFile(path.join(packageRoot, file), 'utf8')
+		for (const [command] of source.matchAll(/npx(?: \S+)* reins hook\b/g)) {
+			if (!command.includes(' --no-install ')) bare.push(`${file}: ${command}`)
+		}
+	}
+	expect(bare).toEqual([])
+})
+
 test('doctor reports whether the harness is installed in the repo itself', async () => {
 	const root = await tmp('doctor')
 	try {
