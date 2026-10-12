@@ -53,11 +53,15 @@ runs the product's own `validate`:
 
 - the **tarball** lane packs the package and installs the `.tgz`, which proves
   the `files` list, the bin path and the Claude hook before and after install;
-- the **git** lane installs `git+file://<this checkout>#<HEAD>`, which is what a
-  product does: npm clones the repo, installs the devDependencies in the clone,
-  runs `scripts/prepare.mjs` there and packs the result. A missing devDependency
-  or a prepare that assumes its cwd only fails here. npm clones HEAD, so
-  uncommitted changes are not exercised; commit before trusting it.
+- the **git** lane installs `git+file://<this checkout>#<HEAD>`, which follows a
+  product's install: npm fetches the commit into a temp dir with no `dist/` and
+  no `node_modules`, installs the devDependencies there, runs
+  `scripts/prepare.mjs` and packs the result. A missing devDependency or a
+  prepare that expects an existing build only fails here. npm takes HEAD, so
+  uncommitted changes are not exercised; commit before trusting it. Two things
+  still differ from a product: the spec pins a sha, so `#semver:` tag resolution
+  is not covered, and for GitHub npm downloads the commit's tarball (no `.git`,
+  so the husky branch of prepare is skipped) rather than cloning.
 
 ## Releasing
 
