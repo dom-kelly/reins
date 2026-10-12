@@ -9,7 +9,7 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 - The Stop hook has its own gate: `hooks.stopGate` in `reins.json` names the npm
   script it runs (default: `policy.gate`), so a product whose merge gate is slow
   can keep a fast stop gate instead of timing out and failing open. A missing
-  script now prints a notice naming it instead of silently passing, and
+  script now shows the user a notice naming it instead of silently passing, and
   `reins doctor` suggests a stop gate when the merge gate is not `validate`.
 
 ## [0.2.2] - 2026-10-12

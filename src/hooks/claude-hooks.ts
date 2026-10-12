@@ -103,9 +103,12 @@ export function runGateOnStopHook(
 	const gate = stopGateScript(readConfig(root))
 	if (!hasScript(root, gate)) {
 		// Not a block (nothing to run), but say so: a misconfigured stop gate
-		// must not be invisible.
-		console.error(
-			`validate-on-stop: no "${gate}" script in package.json, so nothing ran (set hooks.stopGate or policy.gate in reins.json)`,
+		// must not be invisible. Claude Code drops stderr from a hook that exits
+		// 0; a systemMessage on stdout is shown to the user.
+		console.log(
+			JSON.stringify({
+				systemMessage: `validate-on-stop: no "${gate}" script in package.json, so nothing ran (set hooks.stopGate or policy.gate in reins.json)`,
+			}),
 		)
 		return 0
 	}

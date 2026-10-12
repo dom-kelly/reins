@@ -50,11 +50,17 @@ async function dirtyRepo(
 test('the Stop hook runs hooks.stopGate, else policy.gate, else validate', async () => {
 	const root = await mkdtemp(path.join(tmpdir(), 'harness-stop-gate-'))
 	const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+	const notices = vi.spyOn(console, 'log').mockImplementation(() => {})
 	const base = { harness: '0', product: { name: 'x' } }
 	const run = () => {
 		errors.mockClear()
+		notices.mockClear()
 		return runGateOnStopHook(root, '{}')
 	}
+	// Claude Code shows a hook's stdout only as JSON with a systemMessage.
+	const notice = () =>
+		(JSON.parse(notices.mock.calls[0]?.[0]) as { systemMessage: string })
+			.systemMessage
 	try {
 		await dirtyRepo(root, undefined)
 		expect(stopGateScript(undefined)).toBe('validate')
@@ -75,6 +81,7 @@ test('the Stop hook runs hooks.stopGate, else policy.gate, else validate', async
 		})
 		expect(run()).toBe(0)
 		expect(errors).not.toHaveBeenCalled()
+		expect(notices).not.toHaveBeenCalled()
 
 		// Falls back to the gate, and names it in the failure.
 		await dirtyRepo(root, { ...base, policy: { gate: 'bad' } })
@@ -84,19 +91,21 @@ test('the Stop hook runs hooks.stopGate, else policy.gate, else validate', async
 		// Falls back to validate; missing here, so nothing runs but a notice says so.
 		await dirtyRepo(root, base)
 		expect(run()).toBe(0)
-		expect(errors).toHaveBeenCalledTimes(1)
-		expect(errors.mock.calls[0]?.[0]).toMatch(/no "validate" script/)
+		expect(errors).not.toHaveBeenCalled()
+		expect(notices).toHaveBeenCalledTimes(1)
+		expect(notice()).toMatch(/no "validate" script/)
 
 		// A misspelt stop gate is named too.
 		await dirtyRepo(root, { ...base, hooks: { stopGate: 'nope' } })
 		expect(run()).toBe(0)
-		expect(errors.mock.calls[0]?.[0]).toMatch(/no "nope" script/)
+		expect(notice()).toMatch(/no "nope" script/)
 
 		// A second refusal in a row lets the agent stop.
 		await dirtyRepo(root, { ...base, policy: { gate: 'bad' } })
 		expect(runGateOnStopHook(root, '{"stop_hook_active":true}')).toBe(0)
 	} finally {
 		errors.mockRestore()
+		notices.mockRestore()
 		await rm(root, { recursive: true, force: true })
 	}
 })
