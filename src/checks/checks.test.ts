@@ -1,9 +1,10 @@
-import { execFileSync } from 'node:child_process'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { expect, test } from 'vitest'
 import { findBlockedReason, guardDecision } from '../hooks/guard-bash.ts'
+import { packageRoot } from '../lib/repo.ts'
 import { isDocsOnly, parsePrePushInput } from '../hooks/git-hooks.ts'
 import { findDecisionIssues } from './decisions.ts'
 import { extractRelativeLinks } from './doc-links.ts'
@@ -363,6 +364,63 @@ test('guard refuses API and cross-repo merges, and blocks when the policy cannot
 			'/nonexistent',
 		),
 	).toBeUndefined()
+})
+
+// The guard's policy run writes the PR's status too (decision 0010), so a
+// parked merge attempt is what puts needs-owner on the PR.
+test('guard publishes the verdict to the PR when it runs the policy', async () => {
+	const dir = await mkdtemp(path.join(tmpdir(), 'harness-guard-publish-'))
+	const log = path.join(dir, 'gh.log')
+	try {
+		await writeFile(
+			path.join(dir, 'reins.json'),
+			JSON.stringify({
+				harness: '0',
+				product: { name: 'x' },
+				policy: { authority: { low: 'owner' } },
+			}),
+		)
+		await mkdir(path.join(dir, 'docs/contributing/architecture'), {
+			recursive: true,
+		})
+		await writeFile(
+			path.join(dir, 'docs/contributing/architecture/primitives.yaml'),
+			'version: 1\nunowned: [docs/]\ngroups: [{ id: g, name: G }]\nprimitives: []\n',
+		)
+		const res = spawnSync(
+			'node',
+			[
+				'--disable-warning=ExperimentalWarning',
+				path.join(packageRoot, 'bin/reins.ts'),
+				'hook',
+				'guard-bash',
+			],
+			{
+				cwd: dir,
+				encoding: 'utf8',
+				input: JSON.stringify({
+					tool_input: { command: 'gh pr merge 7 --squash --delete-branch' },
+				}),
+				env: {
+					...process.env,
+					PATH: `${path.join(packageRoot, 'src/policy/fixtures')}:${process.env.PATH}`,
+					FILES: 'modified:docs/x.md',
+					GH_LOG: log,
+				},
+			},
+		)
+		expect(res.status).toBe(2)
+		expect(res.stderr).toMatch(/needs the user/)
+		const calls = (await readFile(log, 'utf8')).split('\n')
+		expect(calls).toContain(
+			'api -X POST repos/dom-kelly/demo/issues/7/labels -f labels[]=needs-owner -f labels[]=risk:low',
+		)
+		expect(calls).toContain(
+			'api -X POST repos/dom-kelly/demo/issues/7/assignees -f assignees[]=dom-kelly',
+		)
+	} finally {
+		await rm(dir, { recursive: true, force: true })
+	}
 })
 
 test('guard requires --delete-branch on gh pr merge, before the policy runs', () => {

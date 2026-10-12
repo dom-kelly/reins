@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { readConfig, type HarnessConfig } from '../lib/config.ts'
 import { findRepoRoot } from '../lib/repo.ts'
 import { evaluateMerge, prRefFromCommand } from '../policy/merge-policy.ts'
+import { publishStatus } from '../policy/pr-status.ts'
 
 export type BlockedPattern = { regex: RegExp; reason: string }
 
@@ -100,6 +101,8 @@ export function guardDecision(
 		(config?.policy?.enforceOnMerge ?? true)
 	) {
 		const verdict = evaluateMerge(root, prRefFromCommand(command))
+		// A parked merge is exactly when the owner must see it on the PR.
+		publishStatus(root, verdict)
 		for (const line of verdict.lines) console.error(line)
 		if (!verdict.allowed) return verdict.message
 		console.error(verdict.message)

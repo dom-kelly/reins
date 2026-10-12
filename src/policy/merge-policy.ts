@@ -42,7 +42,17 @@ export type PolicyConfig = {
 	/** Medium and high merged by an agent need a `## Independent review` comment
 	 *  for the head (or an earlier commit on the branch). Default true. */
 	independentReview?: boolean
+	/** Write the verdict to the PR as labels, an assignee and one status
+	 *  comment (decision 0010). Default true. */
+	publish?: boolean
+	/** Who is assigned when a PR is parked. Default: the repo owner when the
+	 *  repo belongs to a user; an organisation repo needs this set. */
+	owner?: string
+	/** Review threads the repo owner opens count as findings. Default true. */
+	ownerFindings?: boolean
 }
+
+export type RepoOwner = { login: string; type: string }
 
 export type Verdict = {
 	allowed: boolean
@@ -57,6 +67,19 @@ export type Verdict = {
 	/** Set when the refusal is that `gh` could not be read; `--wait` retries a
 	 *  few times before believing it. */
 	unread?: boolean
+	/** Set when the policy hands the PR to the owner (`authority` says so). */
+	parked?: true
+	/** The reason behind `message`, without the boilerplate: what is refused
+	 *  or waited for, or why it is allowed or parked. */
+	reason?: string
+	/** Who merges at this PR's tier, once the risk is known. */
+	authority?: 'agent' | 'owner'
+	/** Set by `--wait` when it gave up: `waiting` says on what. */
+	timedOut?: boolean
+	/** The PR and repo, once resolved: what `publishStatus` writes to. */
+	pr?: string
+	repo?: string
+	owner?: RepoOwner
 }
 
 export type WaitOptions = {
@@ -67,6 +90,9 @@ export type WaitOptions = {
 	sleep?: (ms: number) => Promise<void>
 	/** Called with a progress line each time what we wait for changes. */
 	onWait?: (line: string) => void
+	/** Called with the verdict each time what we wait for changes, and with
+	 *  the final one: where the PR's status gets written during a wait. */
+	onVerdict?: (verdict: Verdict) => void
 }
 
 /** A reply that settles a finding: the fixing commit, or a reason. This is
@@ -93,12 +119,30 @@ function max(a: Risk, b: Risk): Risk {
 	return rank(a) >= rank(b) ? a : b
 }
 
-export function gh(args: Array<string>, cwd: string) {
+/** The first words of the line `publishStatus` adds when a write fails. */
+export const writeFailurePrefix = 'policy: could not write PR status'
+
+export function gh(args: Array<string>, cwd: string, timeout?: number) {
 	return execFileSync('gh', args, {
 		cwd,
 		encoding: 'utf8',
 		stdio: ['ignore', 'pipe', 'pipe'],
+		timeout,
 	}).trim()
+}
+
+/** Who owns the repo (a User or an Organization). Undefined when gh cannot
+ *  say: the policy then neither counts the owner's threads nor assigns. */
+export function repoOwner(root: string, repo: string): RepoOwner | undefined {
+	try {
+		const [login, type] = gh(
+			['api', `repos/${repo}`, '--jq', '[.owner.login, .owner.type] | @tsv'],
+			root,
+		).split('\t')
+		return login && type ? { login, type } : undefined
+	} catch {
+		return undefined
+	}
 }
 
 /** Exactly one `**Name:** \`value\`` line, with an allowed value: never a
@@ -311,10 +355,22 @@ export const neverRanFix =
 
 export function evaluateMerge(root: string, prRef?: string): Verdict {
 	const lines: Array<string> = []
+	// Set once the PR is resolved; every verdict after that carries them so
+	// the status can be written to the PR whatever the outcome.
+	let pr: string | undefined
+	let repo: string | undefined
+	let owner: RepoOwner | undefined
+	let riskSoFar: Risk | undefined
+	let authoritySoFar: 'agent' | 'owner' | undefined
 	const no = (message: string): Verdict => ({
 		allowed: false,
 		message: `Merge refused: ${message}. See docs/contributing/shipping-policy.md.`,
+		reason: message,
 		lines,
+		pr,
+		repo,
+		owner,
+		...(riskSoFar ? { risk: riskSoFar, authority: authoritySoFar } : {}),
 	})
 	const wait = (what: string): Verdict => ({
 		...no(`waiting for ${what}`),
@@ -337,7 +393,7 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 	const policy = sources.config?.policy ?? {}
 	const gate = policy.gate ?? 'validate'
 	const ciCheck = policy.ciCheck ?? gate
-	const authority = {
+	const authority: Record<Risk, 'agent' | 'owner'> = {
 		low: 'agent',
 		medium: 'agent',
 		high: 'owner',
@@ -346,15 +402,34 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 	const reviewers = policy.reviewers ?? {}
 	const gateReviewers = reviewers.gate ?? []
 	const required = reviewers.required ?? []
-	const findingsFrom = reviewers.findingsFrom ?? [
-		...gateReviewers.map((g) => g.login),
-		...required,
-	]
 	const ignoreChecks = new Set(reviewers.ignoreChecks ?? [])
 
+	// A PR URL names its repo. One from another repo would be judged against
+	// this repo's PR of the same number, and have its status written there, so
+	// it is refused before anything is read or resolved.
+	const urlRepo =
+		/^https?:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/pull\/\d+/i.exec(
+			prRef ?? '',
+		)?.[1]
+	if (urlRepo) {
+		let here: string
+		try {
+			here = gh(
+				['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'],
+				root,
+			)
+		} catch (error) {
+			return unread(
+				`couldn't read this repo (${error instanceof Error ? error.message.split('\n')[0] : String(error)})`,
+			)
+		}
+		if (here.toLowerCase() !== urlRepo.toLowerCase())
+			return no(
+				`${prRef} is a PR on ${urlRepo}, not this repo (${here}); run the policy, and the merge, from that repo`,
+			)
+	}
+
 	// The PR: a number, URL or branch given on the command, else the current branch's.
-	let pr: string
-	let repo: string
 	let info: PullRequest
 	let files: Array<PullFile>
 	try {
@@ -406,6 +481,23 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 			`couldn't read the PR (${error instanceof Error ? error.message.split('\n')[0] : String(error)})`,
 		)
 	}
+	owner = repoOwner(root, repo)
+	// The owner's own review threads are findings unless the repo says not;
+	// an explicit findingsFrom list is taken as it is. The owner is
+	// `policy.owner`, else the repo owner when the repo belongs to a user. Not
+	// knowing the owner would silently drop those findings, so when the lookup
+	// is what names the owner, its failure is a failed read.
+	const ownerFindings =
+		policy.ownerFindings !== false && !reviewers.findingsFrom
+	if (ownerFindings && !policy.owner && !owner)
+		return unread("couldn't read the repo's owner")
+	const ownerForFindings =
+		policy.owner ?? (owner?.type === 'User' ? owner.login : undefined)
+	const findingsFrom = reviewers.findingsFrom ?? [
+		...gateReviewers.map((g) => g.login),
+		...required,
+		...(ownerFindings && ownerForFindings ? [ownerForFindings] : []),
+	]
 	if (info.isDraft) return no(`PR #${pr} is a draft`)
 	if (info.baseRefName !== 'main') return no(`PR #${pr} doesn't target main`)
 
@@ -448,6 +540,8 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 	)
 	const summary = summarizeChanges(sources.map, paths)
 	const risk = max(max(declared, summary.floor), doorRisk)
+	riskSoFar = risk
+	authoritySoFar = authority[risk]
 	lines.push(
 		`policy: PR #${pr} declared=${change} floor=${summary.floor} (${summary.primitives.map((p) => p.id).join(',')}) door=${doorRisk}`,
 		`policy: PR #${pr} risk=${risk}`,
@@ -484,15 +578,26 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 
 	const park = (why: string): Verdict => ({
 		allowed: false,
+		parked: true,
 		risk,
+		authority: 'owner',
 		message: `Merge needs the user (${risk} risk, ${why}): hand PR #${pr} to the user.`,
+		reason: why,
 		lines,
+		pr,
+		repo,
+		owner,
 	})
 	const yes = (why: string): Verdict => ({
 		allowed: true,
 		risk,
+		authority: 'agent',
 		message: `policy: ${risk} risk, ${why} — agent may merge.`,
+		reason: why,
 		lines,
+		pr,
+		repo,
+		owner,
 	})
 	if (risk === 'low') {
 		return authority.low === 'agent' ? yes('CI green') : park('CI green')
@@ -540,14 +645,14 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 	if (gateUnmet.length) return wait(`${gateUnmet[0]} to pass (risk=${risk})`)
 	let threads: Threads
 	try {
-		const [owner, name] = repo.split('/')
+		const [ownerLogin, name] = repo.split('/')
 		threads = JSON.parse(
 			gh(
 				[
 					'api',
 					'graphql',
 					'-f',
-					`owner=${owner}`,
+					`owner=${ownerLogin}`,
 					'-f',
 					`name=${name}`,
 					'-F',
@@ -687,12 +792,29 @@ export async function waitForMerge(
 		evaluate = evaluateMerge,
 		sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 		onWait = (line) => console.error(line),
+		onVerdict = () => {},
 	}: WaitOptions = {},
 ): Promise<Verdict & { timedOut?: boolean }> {
 	const started = Date.now()
 	let last: string | undefined
 	let polls = 0
 	let unread = 0
+	// A status write that failed on an earlier poll is reported with the final
+	// verdict, whose lines are the ones printed; the poll it happened on is not.
+	const writeFailures: Array<string> = []
+	const notify = (verdict: Verdict) => {
+		onVerdict(verdict)
+		for (const line of verdict.lines) {
+			if (line.startsWith(writeFailurePrefix) && !writeFailures.includes(line))
+				writeFailures.push(line)
+		}
+	}
+	const final = <V extends Verdict>(verdict: V): V => {
+		for (const line of writeFailures) {
+			if (!verdict.lines.includes(line)) verdict.lines.push(line)
+		}
+		return verdict
+	}
 	for (;;) {
 		const verdict = evaluate(root, prRef)
 		polls++
@@ -703,18 +825,24 @@ export async function waitForMerge(
 			await sleep(intervalMs)
 			continue
 		}
-		if (verdict.waiting === undefined) return verdict
+		if (verdict.waiting === undefined) {
+			notify(verdict)
+			return final(verdict)
+		}
 		unread = 0
 		if (verdict.waiting !== last) {
 			onWait(`policy: waiting for ${verdict.waiting}`)
+			notify(verdict)
 			last = verdict.waiting
 		}
 		if (Date.now() - started >= timeoutMs) {
-			return {
+			const gaveUp: Verdict = {
 				...verdict,
 				timedOut: true,
 				message: `policy: gave up after ${Math.round(timeoutMs / 1000)}s, still waiting for ${verdict.waiting}.`,
 			}
+			notify(gaveUp)
+			return final(gaveUp)
 		}
 		await sleep(intervalMs)
 	}

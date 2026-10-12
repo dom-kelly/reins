@@ -405,6 +405,10 @@ const retiredPhrases: ReadonlyArray<{ phrase: string; why: string }> = [
 		phrase: 'templates/.claude/skills',
 		why: 'the skills live in plugin/skills (decision 0009)',
 	},
+	{
+		phrase: 'Shipped / Ready / Blocked',
+		why: 'the wrap-up status is Shipped / Needs you / Blocked (decision 0010)',
+	},
 ]
 // A record of the rename has to quote the old names; nothing else may.
 const retiredPhraseExemptions: Record<string, ReadonlyArray<string>> = {

@@ -60,7 +60,10 @@ owner, stop with everything ready, say which rule applied, and link the PR.
    If the branch becomes conflicting after green, merge main once and re-run; if
    still conflicting, stop and report. When the merge exits 1 with "Reference
    does not exist", GitHub's auto-delete removed the branch first and the merge
-   still happened: confirm with `gh pr view <n> --json state`.
+   still happened: confirm with `gh pr view <n> --json state`. Every policy run
+   also writes the PR's status: the labels `needs-owner` or `agent-merges` plus
+   `risk:<tier>`, the owner assigned when parked, and one `## Shipping policy`
+   comment kept current. Never set those by hand.
 9. **After merge/deploy (if allowed):** confirm `/health` reports the merge sha
    on the deployed origin.
 
@@ -97,8 +100,16 @@ not sleep-poll.
 - Add any new trap to `docs/contributing/gotchas.md`.
 - Final summary to the owner:
   - a human headline of the change (not "ship repo#12");
-  - risk, difficulty (Easy/Medium/Hard), status (Shipped / Ready / Blocked);
+  - risk, difficulty (Easy/Medium/Hard), and exactly one status:
+    - `Shipped` — merged (and deployed where that applies), with the link;
+    - `Needs you: <the one action>` — the policy parked it; quote its
+      `Merge needs the user (…)` line and give the command, for example
+      `gh pr merge <n> --squash --delete-branch`;
+    - `Blocked: <what is waited on>` — something outside this run (a reviewer
+      app, a failing external service, a decision you need from the owner);
   - model used and cost, **only** when the platform reports them;
   - what was verified, and links to the PR and any deployed pages.
 
-  Never invent URLs, costs, or model names.
+  The PR carries the same status (labels, assignee, the `## Shipping policy`
+  comment), so the owner can trust either surface. Never invent URLs, costs, or
+  model names.

@@ -22,6 +22,7 @@ import {
 	waitForMerge,
 	type Verdict,
 } from '../src/policy/merge-policy.ts'
+import { publishStatus } from '../src/policy/pr-status.ts'
 import { packageVersion, readConfig } from '../src/lib/config.ts'
 import { findRepoRoot } from '../src/lib/repo.ts'
 import {
@@ -38,7 +39,7 @@ const help = `reins ${packageVersion} — the agent harness, as a CLI
   reins check [--docs]          decisions, links, skills, primitives map, repo rules
   reins classify [--base ref | --stdin] [--json]   primitives a change touches
   reins doctor                  what a fresh session needs to know
-  reins policy [pr|url|branch] [--wait [--timeout <seconds>]]
+  reins policy [pr|url|branch] [--wait [--timeout <seconds>]] [--no-publish]
                                 may an agent merge this PR? (risk tiers, reviewers, authority);
                                 --wait polls until CI and the reviews are in (default 20 minutes)
   reins hook <guard-bash | typecheck | validate-on-stop | pre-commit | pre-push | node-version>
@@ -123,11 +124,16 @@ async function main(): Promise<number> {
 			return doctorPassed(items) ? 0 : 1
 		}
 		case 'policy': {
+			const publish = flags.has('--no-publish')
+				? () => {}
+				: (v: Verdict) => publishStatus(root, v)
 			const verdict: Verdict & { timedOut?: boolean } = flags.has('--wait')
 				? await waitForMerge(root, positionals[0], {
 						timeoutMs: seconds(options.get('--timeout'), '--timeout') * 1000,
+						onVerdict: publish,
 					})
 				: evaluateMerge(root, positionals[0])
+			if (!flags.has('--wait')) publish(verdict)
 			for (const line of verdict.lines) console.error(line)
 			console.error(verdict.message)
 			// 1 on timeout so a caller can tell "not yet" from "no".

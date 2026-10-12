@@ -4,6 +4,32 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.4.0] - 2026-10-12
+
+- The policy writes the PR's status
+  ([decision 0010](./docs/contributing/decisions/0010-policy-writes-pr-status.md)).
+  Every `reins policy` run, each change of reason during `--wait`, and the guard
+  on `gh pr merge` now set exactly one of the labels `needs-owner` /
+  `agent-merges` plus `risk:<tier>`, assign the owner when the PR is parked
+  (`policy.owner`, or the repo owner of a user-owned repo), and keep one
+  `## Shipping policy` comment (first line `<!-- reins:policy -->`) current with
+  the reason and the merge command. Labels are created on first use; other
+  labels are untouched; a failed write prints
+  `policy: could not write PR status (…)` and never changes the verdict.
+  `policy.publish: false` or `--no-publish` switches it off. The repo owner's
+  review threads now count as findings by default (`policy.ownerFindings`).
+  `ship-pr`'s final summary uses `Shipped` / `Needs you: <action>` /
+  `Blocked: <what>`; "Ready" is retired. The settings template allow-lists
+  `gh pr merge *`, since the guard already runs the policy on every merge, and
+  gives the guard hook an explicit 120 second timeout for the extra `gh` calls.
+- The policy refuses a PR URL from another repo before reading anything, so a
+  `gh pr merge <url>` cannot be judged against this repo's PR of the same number
+  or write its status there. `policy.owner` joins the default `findingsFrom` (so
+  an organisation repo's named owner is answered too), and when nothing names
+  the owner and the lookup fails the policy refuses instead of dropping those
+  findings. A status write that fails during `--wait` is repeated with the final
+  verdict.
+
 ## [0.3.0] - 2026-10-12
 
 - The skills ship as a Claude Code plugin instead of managed copies

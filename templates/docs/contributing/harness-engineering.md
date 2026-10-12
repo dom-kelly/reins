@@ -94,7 +94,11 @@ place are in [growth.md](./growth.md).
 - On any other `gh pr merge` the guard runs the
   [shipping policy](./shipping-policy.md) (`npx reins policy <pr>`) and lets the
   merge through only when it passes; otherwise it prints what the policy is
-  waiting for (a reviewer, an unanswered finding, or the owner).
+  waiting for (a reviewer, an unanswered finding, or the owner). Each run also
+  writes the verdict to the PR as labels (`needs-owner` / `agent-merges`,
+  `risk:<tier>`), an assignee when parked, and one `## Shipping policy` comment,
+  so the owner reads GitHub, not the terminal
+  ([shipping-policy.md](./shipping-policy.md), "Status on the PR").
   `npx reins policy <pr> --wait` waits for CI and the reviews on the current
   head and then gives the verdict, so an agent neither polls `gh pr checks` nor
   re-runs the policy by hand. The harness holds neither a branch push nor an
