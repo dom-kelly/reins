@@ -74,11 +74,17 @@ enforcement ladder in [harness-engineering.md](./harness-engineering.md).
 		"ignoreChecks": ["CodeRabbit"]
 	}
 },
-"hooks": { "stopGate": "validate" }
+"hooks": {
+	"stopGate": "validate",
+	"typecheck": "typecheck",
+	"typecheckIgnore": ["app/generated/"]
+}
 ```
 
 `hooks.stopGate` is what the Claude Code Stop hook runs; it defaults to
-`policy.gate` and should finish in about a minute
+`policy.gate` and should finish in about a minute. `hooks.typecheck` is what the
+typecheck hook runs after a TypeScript edit (default `typecheck`), and
+`hooks.typecheckIgnore` lists path prefixes it leaves alone
 ([harness-engineering.md](./harness-engineering.md), agent guardrails).
 
 With no `reviewers`, medium and high need only the gate; add reviewers as the

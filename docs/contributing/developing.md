@@ -48,6 +48,15 @@ a product of itself.
    product fails here.
 4. In a product, `npx reins sync` (or `--check` in CI to see what is behind).
 
+## Public surface
+
+The CLI is the only contract
+([decision 0004](./decisions/0004-harness-is-a-cli-package.md)): products call
+`npx reins …` and never import this package. `exports` in `package.json`
+enforces it by exposing only `package.json`, so a deep import of `dist/` fails
+at resolution (`ERR_PACKAGE_PATH_NOT_EXPORTED`); the tarball e2e lane checks
+that. To offer something to products, add a command or a hook, not an export.
+
 ## Build output
 
 Node refuses to strip TypeScript types for files under `node_modules`, so the

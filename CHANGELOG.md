@@ -4,7 +4,7 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
-## [0.2.4] - 2026-10-12
+## [0.2.5] - 2026-10-12
 
 - The product-facing docs say what the guard does now: the "Agent guardrails"
   bullets in `harness-engineering.md` list what it refuses (force-push, push to
@@ -16,6 +16,17 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
   `npx reins check`. A test keeps retired wording (`npx harness`,
   `harness.json`, "always ask the owner", …) out of every markdown file under
   `templates/` and `docs/`, the README and `CLAUDE.md`.
+
+## [0.2.4] - 2026-10-12
+
+- The CLI is the only public surface: an `exports` map in `package.json` exposes
+  only `package.json`, so a deep import of `dist/` from a product fails at
+  resolution instead of becoming de facto API (decision 0004).
+- The typecheck hook can run a fast script: `hooks.typecheck` in `reins.json`
+  names the npm script it runs after a TypeScript edit (default `typecheck`),
+  and it now skips files outside the repo root, under `node_modules/`, `dist/`,
+  `build/`, `.react-router/`, or any prefix in `hooks.typecheckIgnore`. A
+  missing script shows the user a notice naming it instead of silently passing.
 
 ## [0.2.3] - 2026-10-12
 

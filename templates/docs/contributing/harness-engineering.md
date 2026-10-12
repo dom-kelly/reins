@@ -96,6 +96,11 @@ place are in [growth.md](./growth.md).
   product whose gate is slow (builds, end-to-end tests) points it at a fast
   script instead, for example a `verify:quick` that runs checks, lint, typecheck
   and unit tests. The merge gate stays complete; the stop gate stays fast.
+- The PostToolUse typecheck hook runs `hooks.typecheck` from `reins.json`
+  (default: `typecheck`) after every TypeScript edit and skips files outside the
+  repo, under `node_modules/`, `dist/`, `build/`, `.react-router/`, or any
+  prefix in `hooks.typecheckIgnore`; a product whose typecheck is slow (typegen,
+  several projects) points it at a fast script.
 - The guard and typecheck hooks refuse to run (exit 2) when the harness is not
   installed, so an uninstalled harness blocks rather than silently allows;
   `npm install` fixes it. The Stop hook only warns, since an agent cannot repair
