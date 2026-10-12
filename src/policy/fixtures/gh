@@ -4,7 +4,8 @@
 # THREADS (JSON), REVIEWERS (logins; "login@oid" to review an older commit;
 # "login:PENDING" for a pending review), COMMENTS (JSON list of issue comment
 # bodies), COMMITS (shas on the PR branch; default HEAD), DRAFT, BASE, HEAD,
-# PRS (JSON list of the repo's recent PRs as {checks:[names],logins:[logins]};
+# PRS (JSON list of the repo's recent PRs as {checks:[check runs],
+# contexts:[status contexts],logins:[review and comment logins]};
 # "fail" makes that one lookup fail; default: three PRs on which every reviewer
 # the test config names has appeared), FAIL (any value makes every gh call fail).
 [ -n "${FAIL:-}" ] && { echo "stub gh: failing on purpose" >&2; exit 1; }
@@ -28,7 +29,7 @@ case "$*" in
   "repo view"*) echo "dom-kelly/demo" ;;
   "auth token"*) echo "gho_stub" ;;
   "api graphql"*"pullRequests("*) [ "$PRS" = fail ] && { echo "stub gh: presence lookup failing on purpose" >&2; exit 1; }
-      jq -nc --argjson p "$PRS" '{data:{repository:{pullRequests:{nodes:[$p | to_entries[] | {number:(.key+1), reviews:{nodes:[.value.logins[]? | {author:{login:.}}]}, comments:{nodes:[]}, commits:{nodes:[{commit:{statusCheckRollup:{contexts:{nodes:[.value.checks[]? | {name:.}]}}}}]}}]}}}}' ;;
+      jq -nc --argjson p "$PRS" '{data:{repository:{pullRequests:{nodes:[$p | to_entries[] | {number:(.key+1), reviews:{nodes:[.value.logins[]? | {author:{login:.}}]}, comments:{nodes:[]}, commits:{nodes:[{commit:{statusCheckRollup:{contexts:{nodes:[(.value.checks[]? | {name:.}), (.value.contexts[]? | {context:.})]}}}}]}}]}}}}' ;;
   *"--json number"*) echo 7 ;;
   "pr view"*) jq -n --arg b "## Intent
 **Door:** \`${DOOR:-two-way}\`

@@ -120,9 +120,12 @@ Every reviewer named in `reviewers` must actually be installed on the repo: the
 list is declared, never discovered. `npx reins doctor` reports any gate check,
 required or `findingsFrom` login that has never run on the repo (it reads the
 check runs, reviews and comments of the last 20 PRs), and the policy refuses
-rather than waits for one, so `--wait` returns at once instead of sitting out
-its timeout on an app that is not there. With fewer than three PRs there is too
-little history to judge and the policy waits as usual.
+rather than waits for a gate check or required reviewer that has never run, so
+`--wait` returns at once instead of sitting out its timeout on an app that is
+not there. With fewer than three PRs there is too little history to judge and
+the policy waits as usual. The first PR after an app is installed is refused the
+same way until the app's check or review appears on it; run the policy again
+then.
 
 ## Asking
 

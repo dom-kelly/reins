@@ -96,11 +96,15 @@ function reviewerItems(
 			`only ${presence.prs} PR(s) so far (needs ${minPresenceHistory})`,
 			'run again once the repo has a few PRs',
 		)
+	// A gate login is the app behind its check, which may pass without
+	// posting a review, so the check's presence vouches for the login.
+	const checkOf = new Map(gate.map((g) => [g.login, g.check]))
 	return named.map(({ name, kind }) => {
 		const ok =
 			kind === 'gate check'
 				? presence.checks.has(name)
-				: presence.logins.has(name)
+				: presence.logins.has(name) ||
+					presence.checks.has(checkOf.get(name) ?? '')
 		return {
 			label: ok
 				? `\`${name}\` (${kind}) has run on this repo`

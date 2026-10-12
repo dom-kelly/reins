@@ -519,20 +519,25 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 		return presence[of].has(name)
 	}
 
-	// Medium and high: gate reviewers passed, their findings addressed.
-	for (const { check } of gateReviewers) {
-		if (!checks.some((c) => c.name === check && c.state === 'SUCCESS')) {
-			if (
-				seen(
-					checks.map((c) => c.name),
-					'checks',
-					check,
-				) === false
-			)
-				return no(`${neverRan(check, 'gate check')}: ${neverRanFix}`)
-			return wait(`${check} to pass (risk=${risk})`)
-		}
+	// Medium and high: gate reviewers passed, their findings addressed. Every
+	// unmet reviewer is checked for presence before any is waited for, so one
+	// that is installed but pending cannot hide one that is not installed.
+	const gateUnmet = gateReviewers
+		.map((g) => g.check)
+		.filter(
+			(check) => !checks.some((c) => c.name === check && c.state === 'SUCCESS'),
+		)
+	for (const check of gateUnmet) {
+		if (
+			seen(
+				checks.map((c) => c.name),
+				'checks',
+				check,
+			) === false
+		)
+			return no(`${neverRan(check, 'gate check')}: ${neverRanFix}`)
 	}
+	if (gateUnmet.length) return wait(`${gateUnmet[0]} to pass (risk=${risk})`)
 	let threads: Threads
 	try {
 		const [owner, name] = repo.split('/')
@@ -600,13 +605,15 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 			.map((r) => r.author.login),
 	)
 	const everReviewed = pull.reviews.nodes.map((r) => botLogin(r.author.login))
-	for (const login of required) {
-		if (!reviewed.has(login)) {
-			if (seen(everReviewed, 'logins', login) === false)
-				return no(`${neverRan(login, 'required reviewer')}: ${neverRanFix}`)
-			return wait(`a review from ${login} on the current commit (risk=high)`)
-		}
+	const requiredUnmet = required.filter((login) => !reviewed.has(login))
+	for (const login of requiredUnmet) {
+		if (seen(everReviewed, 'logins', login) === false)
+			return no(`${neverRan(login, 'required reviewer')}: ${neverRanFix}`)
 	}
+	if (requiredUnmet.length)
+		return wait(
+			`a review from ${requiredUnmet[0]} on the current commit (risk=high)`,
+		)
 	const why = required.length ? 'all reviewers done' : 'CI green'
 	return authority.high === 'agent' ? yes(why) : park(why)
 }

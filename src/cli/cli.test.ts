@@ -511,6 +511,17 @@ test('doctor reports a reviewer in policy.reviewers that has never run on the re
 		expect(formatDoctor([bad!])).toBe(
 			`❌ ${missing} → install the app or remove it from \`policy.reviewers\``,
 		)
+		// The gate check's app may pass without posting a review: its check
+		// vouches for the gate login, which is in findingsFrom by default.
+		process.env.PRS = JSON.stringify([
+			{
+				checks: ['validate', 'Cursor Bugbot'],
+				logins: ['devin-ai-integration'],
+			},
+			{ checks: ['validate'] },
+			{ checks: ['validate'] },
+		])
+		expect(items().every((i) => i.ok)).toBe(true)
 		// Too little history, or no gh: a note, never a failure.
 		process.env.PRS = JSON.stringify([{ checks: ['validate'] }])
 		expect(items()).toEqual([

@@ -493,6 +493,33 @@ describe('merge policy: a declared reviewer must exist on the repo', () => {
 		)
 		expect(result.status).toBe(2)
 	})
+	it('refuses a never-seen reviewer even when an installed one listed before it is still pending', () => {
+		// coderabbitai has reviewed earlier PRs but not this head; devin never ran.
+		const history = JSON.stringify([
+			{ checks: ['validate', 'Cursor Bugbot'], logins: ['coderabbitai'] },
+			{ checks: ['validate'] },
+			{ checks: ['validate'] },
+		])
+		const result = policy({ ...high, PRS: history }, ['--wait'])
+		expect(result.message).toBe(
+			refusal('devin-ai-integration', 'required reviewer'),
+		)
+		expect(result.status).toBe(2)
+	})
+	it('a status context counts as a check that has appeared', () => {
+		const contexts = JSON.stringify([
+			{ checks: ['validate'], contexts: ['Cursor Bugbot'] },
+			{ checks: ['validate'] },
+			{ checks: ['validate'] },
+		])
+		const result = policy({ ...medium, PRS: contexts }, [
+			'--wait',
+			'--timeout',
+			'0',
+		])
+		expect(result.message).toMatch(/still waiting for Cursor Bugbot to pass/)
+		expect(result.status).toBe(1)
+	})
 	it('still waits for a reviewer that appeared on an earlier PR but not this head', () => {
 		// The default history has Bugbot's check, and devin's login with a
 		// `[bot]` suffix that GitHub's REST API adds.
