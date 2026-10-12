@@ -22,11 +22,26 @@ PR.
    medium.
 2. **Validate.** `npm run validate`. Fix failures. Do not weaken a check to
    pass; if a check is wrong, fix the checker with a test.
-3. **Draft first.** Open the PR as a draft while iterating so CI does not run on
-   every commit. Mark it ready only when validate is green locally.
-4. **Review (medium+).** Wait for the AI reviewers (see **AI reviewers** below)
-   and address valid feedback. Also spawn one fresh sub-agent with only the
-   intent, the diff, and the relevant docs; never review your own work.
+3. **Push, open the PR, and start the review while CI runs.** If pushing is
+   allowed, push and `gh pr create` (as a draft while still iterating, so CI
+   does not run on every commit; ready once validate is green locally). Then,
+   without waiting for CI, spawn one fresh sub-agent with only the intent, the
+   diff and the relevant docs; a fast model is fine; never review your own work.
+   When it returns, post its findings on the PR with
+   `gh pr comment <n> --body-file <file>`. The comment's first line is
+   `## Independent review`, the next is `head: <full sha reviewed>`, then the
+   findings (or `No defects found`). The policy needs this comment before an
+   agent merges medium or high; its `head:` must be the current head or an
+   earlier commit of the branch.
+4. **Address findings (medium+).** Treat the independent review and the AI
+   reviewers (see **AI reviewers** below) alike: verify each claim, fix the
+   valid ones. For an independent-review finding, append a line
+   `Fixed in <sha>: <what>` to that same comment rather than posting a new one,
+   so the review and its outcome read as one: fetch the body with
+   `gh api repos/{owner}/{repo}/issues/comments/<id> --jq .body` (ids from
+   `gh api repos/{owner}/{repo}/issues/<n>/comments --jq '.[].id'`), add the
+   line, and write it back with
+   `gh api -X PATCH repos/{owner}/{repo}/issues/comments/<id> -F body=@<file>`.
 5. **Verify (user-visible changes).** Use `verify-app` with realistic data and
    record the evidence.
 6. **Describe.** Fill the PR template: Intent, Why, Summary, Testing (commands
@@ -34,13 +49,20 @@ PR.
 7. **Leftovers.** Remove transitional code now. If something must wait for a
    later gate, say so in the PR under a `Cleanup:` line with a falsifiable
    "ready when"; a `TODO` in code is not a tracker.
-8. **Ship within policy.** Wait on CI for the current head SHA only; ignore
-   results for superseded commits. Then
-   `gh pr merge <n> --squash --delete-branch`: the guard runs
-   `npx reins policy <n>` and either merges or prints what it is waiting for (a
-   reviewer, an unanswered finding, or the owner). Act on that; never retry with
-   other flags or the API. If the branch becomes conflicting after green, rebase
-   once and re-run; if still conflicting, stop and report.
+8. **Ship within policy.** `npx reins policy <n> --wait` polls until every check
+   on the current head has finished and the reviews the tier needs are in, then
+   prints the verdict: exit 0 may merge, 2 refused (it says why), 1 gave up
+   after 20 minutes (`--timeout <seconds>` changes that) and says what it was
+   still waiting for. It reads the head afresh each poll, so a push during the
+   wait is followed. Do not poll `gh pr checks` by hand: right after a push it
+   can report the previous run. On 0,
+   `gh pr merge <n> --squash --delete-branch`: the guard runs the policy again
+   and either merges or prints what it is waiting for (a reviewer, an unanswered
+   finding, or the owner). Act on that; never retry with other flags or the API.
+   If the branch becomes conflicting after green, merge main once and re-run; if
+   still conflicting, stop and report. When the merge exits 1 with "Reference
+   does not exist", GitHub's auto-delete removed the branch first and the merge
+   still happened: confirm with `gh pr view <n> --json state`.
 9. **After merge/deploy (if allowed):** confirm `/health` reports the merge sha
    on the deployed origin.
 

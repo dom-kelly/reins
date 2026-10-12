@@ -4,6 +4,22 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.2.6] - 2026-10-12
+
+- The independent review is on the PR and the policy checks for it: when an
+  agent merges medium or high, `reins policy` needs an issue comment whose first
+  line is `## Independent review` with a `head: <sha>` naming the current head
+  or an earlier commit of the branch (`policy.independentReview: false` turns it
+  off). `ship-pr` now spawns the fresh-context reviewer right after
+  `gh pr create`, while CI runs, posts its findings as that comment and appends
+  `Fixed in <sha>` lines to it.
+- `reins policy <pr> --wait [--timeout <seconds>]` polls every 20 seconds while
+  the verdict waits on something that may still arrive (a check running or not
+  yet reported, a reviewer, the review comment), reading the head afresh each
+  time, then prints the verdict; exit 1 on timeout (default 20 minutes) saying
+  what it was still waiting for. A check still running is now reported as
+  "waiting for" rather than "not green".
+
 ## [0.2.5] - 2026-10-12
 
 - The product-facing docs say what the guard does now: the "Agent guardrails"

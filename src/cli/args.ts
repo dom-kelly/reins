@@ -9,7 +9,7 @@ export type ParsedArgs = {
  *  flag; the rest are positionals, in order. */
 export function parseArgs(
 	argv: ReadonlyArray<string>,
-	valued: ReadonlyArray<string> = ['--name', '--base'],
+	valued: ReadonlyArray<string> = ['--name', '--base', '--timeout'],
 ): ParsedArgs {
 	const [command, ...rest] = argv
 	const positionals: Array<string> = []

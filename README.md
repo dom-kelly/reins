@@ -23,6 +23,7 @@ npm update @dom-kelly/reins && npx reins sync   # later: take a release, merge t
 npx reins check            # decisions, links, skills, primitives map, repo rules
 npx reins classify         # which primitives a branch touches, and the risk floor
 npx reins policy 42      # may an agent merge PR 42? the guard runs this on every gh pr merge
+npx reins policy 42 --wait   # the same, after CI and the reviews on the current head are in
 npx reins doctor
 ```
 

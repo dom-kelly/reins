@@ -5,7 +5,12 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { packageRoot } from '../lib/repo.ts'
-import { bodyField, prRefFromCommand } from './merge-policy.ts'
+import {
+	bodyField,
+	prRefFromCommand,
+	waitForMerge,
+	type Verdict,
+} from './merge-policy.ts'
 
 // Runs the real `reins policy` against a stubbed `gh` (fixtures/gh), one
 // simulated PR per case, in a product with mealplanner-like tiers. A bypass here
@@ -15,6 +20,11 @@ let product: string
 const GREEN = '[{"name":"validate","conclusion":"SUCCESS"}]'
 const BUGBOT =
 	'[{"name":"validate","conclusion":"SUCCESS"},{"name":"Cursor Bugbot","conclusion":"SUCCESS"}]'
+/** The comment ship-pr posts after the fresh-context review. */
+const review = (head = 'abc1234', ...findings: Array<string>) =>
+	JSON.stringify([
+		['## Independent review', `head: ${head}`, '', ...findings].join('\n'),
+	])
 
 beforeAll(async () => {
 	// The stub must be executable to shadow gh via PATH; editors can drop the bit.
@@ -62,7 +72,9 @@ afterAll(async () => {
 	await rm(product, { recursive: true, force: true })
 })
 
-function policy(pr: Record<string, string>) {
+// Every simulated PR carries a valid independent review unless a case says
+// otherwise, so the medium/high cases below exercise the rule's happy path.
+function policy(pr: Record<string, string>, args: Array<string> = []) {
 	const res = spawnSync(
 		'node',
 		[
@@ -70,20 +82,27 @@ function policy(pr: Record<string, string>) {
 			path.join(packageRoot, 'bin/reins.ts'),
 			'policy',
 			'7',
+			...args,
 		],
 		{
 			cwd: product,
 			encoding: 'utf8',
+			timeout: 30_000,
 			env: {
 				...process.env,
 				PATH: `${path.join(packageRoot, 'src/policy/fixtures')}:${process.env.PATH}`,
 				CHECKS: GREEN,
+				COMMENTS: review(),
 				...pr,
 			},
 		},
 	)
 	const out = `${res.stdout}\n${res.stderr}`.trim().split('\n')
-	return { allowed: res.status === 0, message: out.at(-1) ?? '' }
+	return {
+		allowed: res.status === 0,
+		status: res.status,
+		message: out.at(-1) ?? '',
+	}
 }
 
 describe('merge policy: who may merge', () => {
@@ -168,7 +187,42 @@ describe('merge policy: who may merge', () => {
 					'[{"name":"validate","conclusion":"SUCCESS"},{"name":"other","state":"PENDING"}]',
 			},
 			false,
-			/not green/,
+			/waiting for checks to finish: other=PENDING/,
+		],
+		[
+			'a running check run (no conclusion yet) blocks',
+			{
+				FILES: 'modified:docs/x.md',
+				CHECKS:
+					'[{"name":"validate","conclusion":"SUCCESS"},{"name":"other","status":"IN_PROGRESS"}]',
+			},
+			false,
+			/waiting for checks to finish: other=RUNNING/,
+		],
+		[
+			'the gate check not yet reported is waited for, not refused',
+			{ FILES: 'modified:docs/x.md', CHECKS: '[]' },
+			false,
+			/waiting for the validate check to start on abc1234/,
+		],
+		[
+			'the gate check as a pending status context is waited for',
+			{
+				FILES: 'modified:docs/x.md',
+				CHECKS: '[{"context":"validate","state":"PENDING"}]',
+			},
+			false,
+			/waiting for the validate check to finish/,
+		],
+		[
+			'a failed check is refused before a running one is waited for',
+			{
+				FILES: 'modified:docs/x.md',
+				CHECKS:
+					'[{"name":"validate","conclusion":"SUCCESS"},{"name":"slow","status":"IN_PROGRESS"},{"name":"fast","conclusion":"FAILURE"}]',
+			},
+			false,
+			/checks not green: fast=FAILURE/,
 		],
 		[
 			'deleting a test',
@@ -280,6 +334,245 @@ describe('merge policy: review findings (medium)', () => {
 			})
 		},
 	)
+})
+
+describe('merge policy: independent review (medium and high merged by an agent)', () => {
+	const medium = { FILES: 'modified:app/routes/shopping.tsx', CHECKS: BUGBOT }
+
+	it('allows with a review comment for the head', () => {
+		expect(policy({ ...medium, COMMENTS: review('abc1234') })).toMatchObject({
+			allowed: true,
+		})
+	})
+	it('refuses without one, saying what to post', () => {
+		const result = policy({ ...medium, COMMENTS: '[]' })
+		expect(result.message).toMatch(
+			/waiting for an independent review: post a comment whose first line is '## Independent review' with 'head: abc1234' \(risk=medium\)/,
+		)
+		expect(result.allowed).toBe(false)
+	})
+	it('refuses a comment that names a sha not on the branch, without waiting', () => {
+		const result = policy(
+			{ ...medium, COMMENTS: review('9999999'), COMMITS: 'def5678 abc1234' },
+			['--wait'],
+		)
+		expect(result.message).toMatch(
+			/Merge refused: the independent review names no commit of this branch \(head: 9999999; the head is abc1234\)/,
+		)
+		expect(result.status).toBe(2)
+	})
+	it('accepts a review of an earlier commit on the branch (fixes pushed after it)', () => {
+		expect(
+			policy({
+				...medium,
+				COMMENTS: review('def5678', '- nit\nFixed in abc1234: nit'),
+				COMMITS: 'def5678 abc1234',
+			}),
+		).toMatchObject({ allowed: true })
+	})
+	it('matches the sha by prefix, whatever the case', () => {
+		const long = 'ABC1234ABC1234ABC1234ABC1234ABC1234ABC12'
+		expect(
+			policy({
+				...medium,
+				HEAD: long.toLowerCase(),
+				COMMENTS: review('abc1234ab'),
+			}),
+		).toMatchObject({ allowed: true })
+		expect(
+			policy({ ...medium, HEAD: long.toLowerCase(), COMMENTS: review(long) }),
+		).toMatchObject({ allowed: true })
+	})
+	it('one valid review among stale ones is enough', () => {
+		expect(
+			policy({
+				...medium,
+				COMMENTS: JSON.stringify([
+					'## Independent review\nhead: 9999999',
+					'## Independent review\nhead: abc1234\nNo defects found',
+				]),
+			}),
+		).toMatchObject({ allowed: true })
+	})
+	it('refuses a comment with no head line, without waiting', () => {
+		const result = policy(
+			{
+				...medium,
+				COMMENTS: JSON.stringify(['## Independent review\nNo defects found']),
+			},
+			['--wait'],
+		)
+		expect(result.message).toMatch(/names no commit; add 'head: abc1234'/)
+		expect(result.status).toBe(2)
+	})
+	it('ignores a comment whose first line is something else', () => {
+		const result = policy({
+			...medium,
+			COMMENTS: JSON.stringify([
+				'Review notes\n## Independent review\nhead: abc1234',
+			]),
+		})
+		expect(result.allowed).toBe(false)
+	})
+	it('low risk never needs it', () => {
+		expect(
+			policy({ FILES: 'modified:docs/x.md', COMMENTS: '[]' }),
+		).toMatchObject({ allowed: true })
+	})
+	it('an owner tier parks without asking for it', () => {
+		const result = policy({
+			FILES: 'added:drizzle/0009.sql',
+			CHECKS: BUGBOT,
+			REVIEWERS: 'coderabbitai devin-ai-integration',
+			COMMENTS: '[]',
+		})
+		expect(result.message).toMatch(/needs the user/)
+		expect(result.allowed).toBe(false)
+	})
+	it('high merged by an agent needs it', async () => {
+		const file = path.join(product, 'reins.json')
+		const before = await import('node:fs').then((fs) =>
+			fs.readFileSync(file, 'utf8'),
+		)
+		const cfg = JSON.parse(before)
+		cfg.policy.authority = { high: 'agent' }
+		cfg.policy.reviewers = {}
+		await writeFile(file, JSON.stringify(cfg))
+		try {
+			const high = { FILES: 'added:drizzle/0009.sql' }
+			expect(policy({ ...high, COMMENTS: '[]' }).message).toMatch(
+				/independent review.*\(risk=high\)/,
+			)
+			expect(policy(high)).toMatchObject({ allowed: true })
+		} finally {
+			await writeFile(file, before)
+		}
+	})
+	it('policy.independentReview: false switches it off', async () => {
+		const file = path.join(product, 'reins.json')
+		const before = await import('node:fs').then((fs) =>
+			fs.readFileSync(file, 'utf8'),
+		)
+		const cfg = JSON.parse(before)
+		cfg.policy.independentReview = false
+		await writeFile(file, JSON.stringify(cfg))
+		try {
+			expect(policy({ ...medium, COMMENTS: '[]' })).toMatchObject({
+				allowed: true,
+			})
+		} finally {
+			await writeFile(file, before)
+		}
+	})
+})
+
+const pending = (what: string): Verdict => ({
+	allowed: false,
+	message: `Merge refused: waiting for ${what}.`,
+	lines: [],
+	waiting: what,
+})
+
+describe('merge policy: --wait', () => {
+	const done: Verdict = { allowed: true, message: 'ok', lines: ['l'] }
+
+	it('polls while the verdict waits on something, then returns it', async () => {
+		const verdicts = [pending('ci'), pending('ci'), pending('review'), done]
+		const slept: Array<number> = []
+		const waited: Array<string> = []
+		const result = await waitForMerge('.', '7', {
+			intervalMs: 5,
+			evaluate: () => verdicts.shift()!,
+			sleep: async (ms) => {
+				slept.push(ms)
+			},
+			onWait: (line) => waited.push(line),
+		})
+		expect(result).toEqual(done)
+		expect(slept).toEqual([5, 5, 5])
+		// One progress line per change of reason, not per poll.
+		expect(waited).toEqual([
+			'policy: waiting for ci',
+			'policy: waiting for review',
+		])
+	})
+	it('returns a refusal at once', async () => {
+		const no: Verdict = {
+			allowed: false,
+			message: 'Merge refused: x.',
+			lines: [],
+		}
+		let polls = 0
+		const result = await waitForMerge('.', '7', {
+			evaluate: () => (polls++, no),
+			sleep: async () => {},
+			onWait: () => {},
+		})
+		expect(result).toEqual(no)
+		expect(polls).toBe(1)
+	})
+	it('retries a few failed reads mid-wait, but not on the first poll', async () => {
+		const unread: Verdict = {
+			allowed: false,
+			message: "Merge refused: couldn't read the PR.",
+			lines: [],
+			unread: true,
+		}
+		const blips = [pending('ci'), unread, unread, done]
+		const result = await waitForMerge('.', '7', {
+			evaluate: () => blips.shift()!,
+			sleep: async () => {},
+			onWait: () => {},
+		})
+		expect(result).toEqual(done)
+		const first = await waitForMerge('.', '7', {
+			evaluate: () => unread,
+			sleep: async () => {},
+			onWait: () => {},
+		})
+		expect(first).toEqual(unread)
+		const persistent = [pending('ci'), unread, unread, unread, unread]
+		expect(
+			await waitForMerge('.', '7', {
+				evaluate: () => persistent.shift()!,
+				sleep: async () => {},
+				onWait: () => {},
+			}),
+		).toEqual(unread)
+	})
+	it('gives up after the timeout, saying what it was still waiting for', async () => {
+		const result = await waitForMerge('.', '7', {
+			timeoutMs: 0,
+			evaluate: () => pending('the validate check to finish on abc1234'),
+			sleep: async () => {},
+			onWait: () => {},
+		})
+		expect(result.timedOut).toBe(true)
+		expect(result.allowed).toBe(false)
+		expect(result.message).toBe(
+			'policy: gave up after 0s, still waiting for the validate check to finish on abc1234.',
+		)
+	})
+	it('from the CLI: --timeout is valued, exit 1 on timeout, 0 when nothing is pending', () => {
+		const running = {
+			FILES: 'modified:docs/x.md',
+			CHECKS: '[{"name":"validate","status":"IN_PROGRESS"}]',
+		}
+		const timedOut = policy(running, ['--wait', '--timeout', '0'])
+		expect(timedOut.status).toBe(1)
+		expect(timedOut.message).toMatch(
+			/gave up after 0s, still waiting for the validate check to finish on abc1234/,
+		)
+		expect(policy({ FILES: 'modified:docs/x.md' }, ['--wait'])).toMatchObject({
+			status: 0,
+		})
+		expect(
+			policy(
+				{ ...running, CHECKS: '[{"name":"validate","conclusion":"FAILURE"}]' },
+				['--wait'],
+			),
+		).toMatchObject({ status: 2 })
+	})
 })
 
 describe('merge policy: config comes from origin/main, not the working tree', () => {

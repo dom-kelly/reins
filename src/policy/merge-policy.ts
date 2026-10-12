@@ -39,6 +39,9 @@ export type PolicyConfig = {
 	}
 	/** Route `gh pr merge` through the policy in the guard hook. Default true. */
 	enforceOnMerge?: boolean
+	/** Medium and high merged by an agent need a `## Independent review` comment
+	 *  for the head (or an earlier commit on the branch). Default true. */
+	independentReview?: boolean
 }
 
 export type Verdict = {
@@ -48,12 +51,39 @@ export type Verdict = {
 	message: string
 	/** Progress lines, for the hook's stderr. */
 	lines: Array<string>
+	/** Set when the refusal is for something that may still arrive (a check
+	 *  running, a review not yet posted): `--wait` polls while this is set. */
+	waiting?: string
+	/** Set when the refusal is that `gh` could not be read; `--wait` retries a
+	 *  few times before believing it. */
+	unread?: boolean
+}
+
+export type WaitOptions = {
+	intervalMs?: number
+	timeoutMs?: number
+	/** Injected by tests. */
+	evaluate?: typeof evaluateMerge
+	sleep?: (ms: number) => Promise<void>
+	/** Called with a progress line each time what we wait for changes. */
+	onWait?: (line: string) => void
 }
 
 /** A reply that settles a finding: the fixing commit, or a reason. This is
  *  an honour system — the policy checks the words, not the diff. */
 const addressed = /^\s*(Fixed in [0-9a-f]{7,}|wontfix:)/i
 const testFile = /\.(test|spec)\.[cm]?[jt]sx?$/
+/** A check that has not finished: a running check run has no conclusion. */
+const notFinished = new Set([
+	'',
+	'PENDING',
+	'EXPECTED',
+	'QUEUED',
+	'IN_PROGRESS',
+])
+/** The review comment ship-pr posts: first line, then the sha it looked at. */
+const reviewHeading = '## Independent review'
+const reviewHead = /^head:\s*([0-9a-f]{7,40})\b/im
 
 function rank(risk: Risk) {
 	return riskLevels.indexOf(risk)
@@ -174,6 +204,14 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 		message: `Merge refused: ${message}. See docs/contributing/shipping-policy.md.`,
 		lines,
 	})
+	const wait = (what: string): Verdict => ({
+		...no(`waiting for ${what}`),
+		waiting: what,
+	})
+	const unread = (message: string): Verdict => ({
+		...no(message),
+		unread: true,
+	})
 
 	let sources: ReturnType<typeof policySources>
 	try {
@@ -252,7 +290,7 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 			.filter(Boolean)
 			.map((line) => JSON.parse(line) as PullFile)
 	} catch (error) {
-		return no(
+		return unread(
 			`couldn't read the PR (${error instanceof Error ? error.message.split('\n')[0] : String(error)})`,
 		)
 	}
@@ -303,22 +341,33 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 		`policy: PR #${pr} risk=${risk}`,
 	)
 
-	// Every tier: green CI on the current head.
+	// Every tier: green CI on the current head. A check still running, or the
+	// gate check not yet reported (it takes a minute to appear after a push),
+	// is waited for; a failed one is refused.
 	const checks = (info.statusCheckRollup ?? []).map((c) => ({
 		name: c.name ?? c.context ?? '',
 		state: c.conclusion ?? c.state ?? '',
 	}))
-	if (!checks.some((c) => c.name === ciCheck && c.state === 'SUCCESS')) {
-		return no(`the ${ciCheck} check hasn't passed`)
-	}
-	const red = checks.filter(
+	const ci = checks.find((c) => c.name === ciCheck)
+	if (!ci) return wait(`the ${ciCheck} check to start on ${info.headRefOid}`)
+	if (notFinished.has(ci.state))
+		return wait(`the ${ciCheck} check to finish on ${info.headRefOid}`)
+	if (ci.state !== 'SUCCESS') return no(`the ${ciCheck} check hasn't passed`)
+	// A failed check is refused before a slow one is waited for.
+	const unsettled = checks.filter((c) => !ignoreChecks.has(c.name))
+	const red = unsettled.filter(
 		(c) =>
-			!ignoreChecks.has(c.name) &&
+			!notFinished.has(c.state) &&
 			!['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(c.state),
 	)
 	if (red.length)
 		return no(
 			`checks not green: ${red.map((c) => `${c.name}=${c.state}`).join(' ')}`,
+		)
+	const running = unsettled.filter((c) => notFinished.has(c.state))
+	if (running.length)
+		return wait(
+			`checks to finish: ${running.map((c) => `${c.name}=${c.state || 'RUNNING'}`).join(' ')}`,
 		)
 
 	const park = (why: string): Verdict => ({
@@ -340,7 +389,7 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 	// Medium and high: gate reviewers passed, their findings addressed.
 	for (const { check } of gateReviewers) {
 		if (!checks.some((c) => c.name === check && c.state === 'SUCCESS')) {
-			return no(`waiting for ${check} to pass (risk=${risk})`)
+			return wait(`${check} to pass (risk=${risk})`)
 		}
 	}
 	let threads: Threads
@@ -364,7 +413,7 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 			),
 		)
 	} catch {
-		return no("couldn't read review threads")
+		return unread("couldn't read review threads")
 	}
 	const pull = threads.data.repository.pullRequest
 	const open = pull.reviewThreads.nodes.filter((t) => {
@@ -381,6 +430,21 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 			`${open.length} review finding(s) from ${from} not addressed — fix and reply 'Fixed in <sha>: …', or reply 'wontfix: <reason>'`,
 		)
 	}
+	// An agent merging medium or high needs the fresh-context review that
+	// ship-pr posts, on this head or an earlier commit of the branch. Like
+	// `Fixed in`, this checks that the review happened, not its quality. Only
+	// a missing comment is waited for; a wrong one needs the agent to act.
+	if (authority[risk] === 'agent' && (policy.independentReview ?? true)) {
+		let review: ReturnType<typeof independentReview>
+		try {
+			review = independentReview(root, repo, pr, info.headRefOid)
+		} catch {
+			return unread("couldn't read the PR's comments")
+		}
+		if (review.missing) return wait(`${review.missing} (risk=${risk})`)
+		if (review.wrong) return no(`${review.wrong} (risk=${risk})`)
+		lines.push(`policy: PR #${pr} independent review found for the head`)
+	}
 	if (risk === 'medium') {
 		const why = gateReviewers.length
 			? 'CI and reviewers green, findings addressed'
@@ -396,12 +460,112 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 	)
 	for (const login of required) {
 		if (!reviewed.has(login))
-			return no(
-				`waiting for a review from ${login} on the current commit (risk=high)`,
-			)
+			return wait(`a review from ${login} on the current commit (risk=high)`)
 	}
 	const why = required.length ? 'all reviewers done' : 'CI green'
 	return authority.high === 'agent' ? yes(why) : park(why)
+}
+
+/** Whether a `## Independent review` comment covers `head`: `missing` when
+ *  none is posted yet, `wrong` when one is but names no commit of the PR. The
+ *  `head:` may be an earlier commit of the branch (fixes pushed after the
+ *  review keep it valid; a rebase does not), matched by prefix. */
+function independentReview(
+	root: string,
+	repo: string,
+	pr: string,
+	head: string,
+): { missing?: string; wrong?: string } {
+	const comments = gh(
+		[
+			'api',
+			'--paginate',
+			`repos/${repo}/issues/${pr}/comments`,
+			'--jq',
+			'.[] | {body}',
+		],
+		root,
+	)
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => (JSON.parse(line) as { body?: string }).body ?? '')
+		.filter((body) => body.split('\n')[0]?.trim() === reviewHeading)
+	if (!comments.length) {
+		return {
+			missing: `an independent review: post a comment whose first line is '${reviewHeading}' with 'head: ${head}'`,
+		}
+	}
+	const shas = comments.flatMap((body) => reviewHead.exec(body)?.[1] ?? [])
+	if (!shas.length) {
+		return {
+			wrong: `the independent review comment names no commit; add 'head: ${head}'`,
+		}
+	}
+	const commits = gh(
+		[
+			'api',
+			'--paginate',
+			`repos/${repo}/pulls/${pr}/commits`,
+			'--jq',
+			'.[].sha',
+		],
+		root,
+	)
+		.split('\n')
+		.filter(Boolean)
+	commits.push(head)
+	const onBranch = (sha: string) =>
+		commits.some((c) => c.toLowerCase().startsWith(sha.toLowerCase()))
+	if (shas.some(onBranch)) return {}
+	return {
+		wrong: `the independent review names no commit of this branch (head: ${shas.join(', ')}; the head is ${head})`,
+	}
+}
+
+/** `reins policy --wait`: re-evaluates every `intervalMs` while the verdict
+ *  waits on something that may still arrive, reading the head afresh each
+ *  time so a push during the wait is followed. Gives up after `timeoutMs`
+ *  with `timedOut` set and the message saying what it was still waiting for. */
+export async function waitForMerge(
+	root: string,
+	prRef: string | undefined,
+	{
+		intervalMs = 20_000,
+		timeoutMs = 20 * 60_000,
+		evaluate = evaluateMerge,
+		sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+		onWait = (line) => console.error(line),
+	}: WaitOptions = {},
+): Promise<Verdict & { timedOut?: boolean }> {
+	const started = Date.now()
+	let last: string | undefined
+	let polls = 0
+	let unread = 0
+	for (;;) {
+		const verdict = evaluate(root, prRef)
+		polls++
+		// A read that fails once we have seen the PR is more likely a blip in
+		// gh or the network than a refusal; the first poll fails fast on a bad
+		// PR reference.
+		if (verdict.unread && polls > 1 && ++unread <= 3) {
+			await sleep(intervalMs)
+			continue
+		}
+		if (verdict.waiting === undefined) return verdict
+		unread = 0
+		if (verdict.waiting !== last) {
+			onWait(`policy: waiting for ${verdict.waiting}`)
+			last = verdict.waiting
+		}
+		if (Date.now() - started >= timeoutMs) {
+			return {
+				...verdict,
+				timedOut: true,
+				message: `policy: gave up after ${Math.round(timeoutMs / 1000)}s, still waiting for ${verdict.waiting}.`,
+			}
+		}
+		await sleep(intervalMs)
+	}
 }
 
 /** The PR a `gh pr merge …` command names (number, URL or branch), if any. */
