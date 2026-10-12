@@ -4,6 +4,17 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.4.3] - 2026-10-12
+
+- `reins doctor` runs at session start. The managed `.claude/settings.json`
+  gains a SessionStart hook, `npx reins hook session-start`, which prints the
+  doctor lines into the agent's context so a session that opens on a clone with
+  no `node_modules`, the wrong Node or an overdue sync is told what to fix
+  before it does anything. The hook never blocks and skips the GitHub lookups
+  (branch auto-delete, reviewer presence): `reins doctor --offline` is the same
+  run by hand, and plain `npx reins doctor` still adds them. Products take the
+  hook with `npx reins sync`.
+
 ## [0.4.1] - 2026-10-12
 
 - Docs brought back in line with the code. Product docs: the shipping policy

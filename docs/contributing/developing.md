@@ -11,19 +11,19 @@ node bin/reins.ts --help
 
 ## Layout
 
-| Path                 | What                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------------- |
-| `bin/reins.ts`       | CLI entry: new, adopt, sync, check, classify, policy, doctor, hook                    |
-| `src/checks/`        | Checkers behind `reins check` and the git hooks                                       |
-| `src/hooks/`         | The Bash guard, the typecheck and gate-on-stop hooks, the git hook runner             |
-| `src/policy/`        | `reins policy`: risk tiers, reviewers, authority; tested against a stub `gh`          |
-| `src/lib/`           | Repo discovery, `reins.json`, template apply and three-way sync                       |
-| `src/cli/`           | new, adopt, doctor                                                                    |
-| `templates/`         | Files written into products; `manifest.json` says which are managed, owned or retired |
-| `scaffold/app-node/` | The placeholder app `reins new` starts from                                           |
-| `plugin/`            | The Claude Code plugin: the skills, which products load in place from node_modules    |
-| `.claude-plugin/`    | The marketplace that lists the plugin; the package root is the marketplace root       |
-| `docs/contributing/` | These docs, about the harness itself                                                  |
+| Path                 | What                                                                                     |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| `bin/reins.ts`       | CLI entry: new, adopt, sync, check, classify, policy, doctor, hook                       |
+| `src/checks/`        | Checkers behind `reins check` and the git hooks                                          |
+| `src/hooks/`         | The Bash guard, the session-start, typecheck and gate-on-stop hooks, the git hook runner |
+| `src/policy/`        | `reins policy`: risk tiers, reviewers, authority; tested against a stub `gh`             |
+| `src/lib/`           | Repo discovery, `reins.json`, template apply and three-way sync                          |
+| `src/cli/`           | new, adopt, doctor                                                                       |
+| `templates/`         | Files written into products; `manifest.json` says which are managed, owned or retired    |
+| `scaffold/app-node/` | The placeholder app `reins new` starts from                                              |
+| `plugin/`            | The Claude Code plugin: the skills, which products load in place from node_modules       |
+| `.claude-plugin/`    | The marketplace that lists the plugin; the package root is the marketplace root          |
+| `docs/contributing/` | These docs, about the harness itself                                                     |
 
 The harness does not adopt itself through `reins sync`. Decision
 [0004](./decisions/0004-harness-is-a-cli-package.md) keeps this repo's

@@ -28,6 +28,16 @@
 		]
 	},
 	"hooks": {
+		"SessionStart": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/bin/reins.ts\" hook session-start || echo 'the harness session-start hook did not run (wrong Node or missing node_modules? run nvm use && npm install)'"
+					}
+				]
+			}
+		],
 		"PreToolUse": [
 			{
 				"matcher": "Bash",

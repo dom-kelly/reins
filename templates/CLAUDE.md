@@ -6,6 +6,10 @@ intent in docs/contributing/project-intent.md. -->
 `npm run validate` is the single authoritative local gate. CI runs the same
 checks, so green locally means green in CI.
 
+A Claude Code session runs `reins doctor` at startup (a SessionStart hook; any
+other agent runs `npx reins doctor --offline` first). Fix anything marked ❌
+before starting work; `npx reins doctor` by hand adds the GitHub checks.
+
 This file is a map, not an encyclopedia. Open the doc you need; do not read them
 all up front.
 

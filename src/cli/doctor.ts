@@ -181,8 +181,18 @@ function reviewerItems(
 	})
 }
 
+export type DoctorOptions = {
+	/** Skip the lines that read GitHub (branch auto-delete, reviewer
+	 *  presence); the rest is the local file system and `gh auth token`. The
+	 *  SessionStart hook runs this way so a session opens in about a second. */
+	offline?: boolean
+}
+
 /** What a fresh session needs to know before doing anything. */
-export function doctor(root: string): Array<Item> {
+export function doctor(
+	root: string,
+	{ offline = false }: DoctorOptions = {},
+): Array<Item> {
 	const config = readConfig(root)
 	const nodeIssue = checkNodeVersion(root)
 	// `gh auth token` is local and reflects the active account; `gh auth status` fails on any stale secondary account.
@@ -231,9 +241,10 @@ export function doctor(root: string): Array<Item> {
 			fix: 'gh auth login',
 		},
 	]
-	const autoDelete = gh.status === 0 ? autoDeleteItem(root) : undefined
+	const autoDelete =
+		!offline && gh.status === 0 ? autoDeleteItem(root) : undefined
 	if (autoDelete) items.push(autoDelete)
-	if (config?.policy?.reviewers)
+	if (!offline && config?.policy?.reviewers)
 		items.push(...reviewerItems(root, config.policy.reviewers, gh.status === 0))
 	// The Stop hook has a 300 second budget and fails open on a timeout, so a
 	// gate slower than `validate` wants a fast stop gate of its own.

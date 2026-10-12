@@ -496,11 +496,15 @@ async function hooksByEvent(file: string) {
 // would silently switch the guard off; and a bare `npx reins` falls back to
 // the public registry, where an unrelated `harness` package exists. The Stop
 // hook is the exception: exit 2 there sends the agent back to a repair it
-// cannot make (the guard blocks `npm install` too), so it only warns.
+// cannot make (the guard blocks `npm install` too), so it only warns. The
+// SessionStart hook only informs: its stdout joins the agent's context, so an
+// uninstalled harness is reported there (exit 0) rather than hidden in a
+// non-blocking failure.
 test('Claude hook commands fail closed when the harness is not installed', async () => {
 	const blocks = / \|\| \{ \[ \$\? -eq 2 \] \|\| echo '[^']+' >&2; exit 2; \}$/
 	const warns =
 		/ \|\| \{ \[ \$\? -eq 2 \] && exit 2; echo '[^']+' >&2; exit 1; \}$/
+	const informs = / \|\| echo '[^']+'$/
 	for (const [file, start] of [
 		['templates/.claude/settings.json', 'npx --no-install reins hook '],
 		['.claude/settings.json', 'node '],
@@ -509,13 +513,17 @@ test('Claude hook commands fail closed when the harness is not installed', async
 		expect(Object.keys(hooks).toSorted()).toEqual([
 			'PostToolUse',
 			'PreToolUse',
+			'SessionStart',
 			'Stop',
 		])
 		for (const [event, entries] of Object.entries(hooks)) {
 			expect(entries, `${file} ${event}`).toHaveLength(1)
 			const [hook] = entries
 			expect(hook!.command.startsWith(start), `${file} ${event}`).toBe(true)
-			if (event === 'Stop') {
+			if (event === 'SessionStart') {
+				expect(hook!.command, `${file} ${event}`).toMatch(informs)
+				expect(hook!.onFailure).toBeUndefined()
+			} else if (event === 'Stop') {
 				expect(hook!.command, `${file} ${event}`).toMatch(warns)
 				expect(hook!.onFailure).toBeUndefined()
 			} else {
@@ -686,6 +694,41 @@ test('doctor suggests a fast stop gate when the merge gate is not validate', asy
 		})
 		expect(item()).toBeUndefined()
 	} finally {
+		await rm(root, { recursive: true, force: true })
+	}
+})
+
+/** doctor's lines that come from GitHub rather than the file system. */
+const fromGitHub = (label: string) =>
+	label.includes('run on this repo') ||
+	label.startsWith('policy.reviewers not checked') ||
+	label.includes('merged branches')
+
+// The SessionStart hook runs doctor this way; a session must not wait on
+// GitHub, and a reviewer gap is for `npx reins doctor` by hand.
+test('doctor --offline leaves out the lines that read GitHub', async () => {
+	const root = await tmp('doctor-offline')
+	const env = { PATH: process.env.PATH, FAIL: process.env.FAIL }
+	// Any gh call beyond `auth token` would hit the stub and fail loudly.
+	chmodSync(path.join(packageRoot, 'src/policy/fixtures/gh'), 0o755)
+	process.env.PATH = `${path.join(packageRoot, 'src/policy/fixtures')}:${process.env.PATH}`
+	delete process.env.FAIL
+	writeConfig(root, {
+		harness: packageVersion,
+		product: { name: 'x' },
+		policy: { reviewers: { required: ['devin-ai-integration'] } },
+	})
+	try {
+		forgetPresence()
+		const online = doctor(root).map((i) => i.label)
+		forgetPresence()
+		const offline = doctor(root, { offline: true }).map((i) => i.label)
+		expect(online.some(fromGitHub)).toBe(true)
+		expect(offline.filter(fromGitHub)).toEqual([])
+		expect(offline).toEqual(online.filter((label) => !fromGitHub(label)))
+	} finally {
+		Object.assign(process.env, env)
+		if (env.FAIL === undefined) delete process.env.FAIL
 		await rm(root, { recursive: true, force: true })
 	}
 })

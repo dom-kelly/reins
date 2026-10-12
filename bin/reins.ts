@@ -14,6 +14,7 @@ import { createProduct } from '../src/cli/new.ts'
 import { runGitHook } from '../src/hooks/git-hooks.ts'
 import {
 	runGateOnStopHook,
+	runSessionStartHook,
 	runTypecheckHook,
 } from '../src/hooks/claude-hooks.ts'
 import { runGuardBash } from '../src/hooks/guard-bash.ts'
@@ -38,11 +39,11 @@ const help = `reins ${packageVersion} — the agent harness, as a CLI
   reins sync [--check]          bring managed files up to date (three-way merge)
   reins check [--docs]          decisions, links, skills, primitives map, repo rules
   reins classify [--base ref | --stdin] [--json]   primitives a change touches
-  reins doctor                  what a fresh session needs to know
+  reins doctor [--offline]      what a fresh session needs to know (--offline skips GitHub)
   reins policy [pr|url|branch] [--wait [--timeout <seconds>]] [--no-publish]
                                 may an agent merge this PR? (risk tiers, reviewers, authority);
                                 --wait polls until CI and the reviews are in (default 20 minutes)
-  reins hook <guard-bash | typecheck | validate-on-stop | pre-commit | pre-push | node-version>
+  reins hook <guard-bash | typecheck | validate-on-stop | session-start | pre-commit | pre-push | node-version>
 `
 
 function seconds(
@@ -119,7 +120,7 @@ async function main(): Promise<number> {
 			return 0
 		}
 		case 'doctor': {
-			const items = doctor(root)
+			const items = doctor(root, { offline: flags.has('--offline') })
 			console.log(formatDoctor(items))
 			return doctorPassed(items) ? 0 : 1
 		}
@@ -145,6 +146,7 @@ async function main(): Promise<number> {
 			if (hook === 'guard-bash') return runGuardBash()
 			if (hook === 'typecheck') return runTypecheckHook(root)
 			if (hook === 'validate-on-stop') return runGateOnStopHook(root)
+			if (hook === 'session-start') return runSessionStartHook(root)
 			if (
 				hook === 'pre-commit' ||
 				hook === 'pre-push' ||
