@@ -148,7 +148,9 @@ test('a product built from the packed package passes its own validate', async ()
 
 		// The typecheck hook the same way, with npm's prefix outside nvm as it
 		// is when the session's Node is not nvm's: the product's typecheck must
-		// run (on the Node in .nvmrc) and pass, not be skipped or refused.
+		// run and pass, not be skipped or refused. The Node running this test
+		// matches the product's .nvmrc, so it is used as is; the switch to
+		// another is unit-tested.
 		const typecheckCommand = settings.hooks.PostToolUse[0]!.hooks[0]!.command
 		const edited = (await readdir(path.join(product, 'src'))).find((f) =>
 			f.endsWith('.ts'),

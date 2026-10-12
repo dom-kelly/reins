@@ -12,12 +12,14 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
   `npm_config_prefix` set to that Node's prefix, nvm refused `nvm use` because
   the prefix was outside `NVM_DIR`, and the hook silently ran the gate on the
   wrong Node (rollup: "Cannot find module `@rollup/rollup-darwin-x64`" under a
-  Homebrew x64 Node 23 on an arm64 Mac). The hook now drops the npm prefix
-  variables before sourcing nvm, only consults nvm when the repo has an
-  `.nvmrc`, and when nvm still cannot select that Node it exits 2 with nvm's
-  message instead of running with whatever is on PATH. A unit test runs the
-  switch against a `node` shim and a prefix outside nvm; the tarball e2e lane
-  runs the typecheck hook command as Claude Code does with such a prefix.
+  Homebrew x64 Node 23 on an arm64 Mac). The hook now uses its own Node when
+  that already matches `.nvmrc` (CI, where nvm is present but Node comes from
+  setup-node), otherwise drops the npm prefix variables and lets nvm select the
+  right one, and when neither gives that Node it exits 2 saying which Node is
+  required and why nvm could not supply it, instead of running the script on the
+  wrong Node. A unit test drives the switch with a `node` shim and a prefix
+  outside nvm; the tarball e2e lane runs the typecheck hook command as Claude
+  Code does with such a prefix.
 - The product harness-engineering doc routes a papercut owned by the harness to
   a `friction` issue on dom-kelly/reins instead of a workaround in the product.
 

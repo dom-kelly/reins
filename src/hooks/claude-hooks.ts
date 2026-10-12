@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
+import { nodeVersionIssue } from '../checks/node-version.ts'
 import { readConfig, type HarnessConfig } from '../lib/config.ts'
 
 /** The environment an npm script run by a hook gets. Two things the hook's
@@ -12,7 +13,8 @@ import { readConfig, type HarnessConfig } from '../lib/config.ts'
  *  - npm exports its config to whatever it runs, so `npx reins hook …` arrives
  *    with npm_config_prefix set to the prefix of the Node that ran npx. nvm
  *    refuses `nvm use` when that prefix is outside NVM_DIR (a Homebrew Node,
- *    say), which is exactly the Node the switch below exists to get away from. */
+ *    say), which is exactly the Node the switch in runNpmScript exists to get
+ *    away from. */
 function hookEnv(env = process.env) {
 	const clean = { ...env }
 	for (const key of [
@@ -28,39 +30,52 @@ function hookEnv(env = process.env) {
 	return clean
 }
 
-/** Runs an npm script with the Node from .nvmrc when the repo has one and nvm
- *  is installed: hooks inherit the shell's default Node, which may not be the
- *  one the project's native bindings were built for. When nvm cannot select
- *  that Node the script does not run and the output says why; running it with
- *  whatever Node is on PATH would fail later with a misleading error (a
- *  missing native binding) or, worse, pass. Returns { status, output }. */
-export function runNpmScript(root: string, script: string) {
-	const nvm = path.join(
-		process.env.NVM_DIR ?? path.join(homedir(), '.nvm'),
-		'nvm.sh',
-	)
+/** Runs an npm script on the Node in .nvmrc. Hooks inherit the shell's
+ *  default Node, which may not be the one the project's native bindings were
+ *  built for: when the Node this process runs on (the one npm would hand the
+ *  script) already matches .nvmrc it is used as is; otherwise nvm selects the
+ *  right one. When neither gives that Node the script does not run and the
+ *  output says why: running it on the wrong Node fails later with a misleading
+ *  error (a missing native binding) or, worse, passes. `nodeVersion` is a
+ *  parameter for the tests. Returns { status, output }. */
+export function runNpmScript(
+	root: string,
+	script: string,
+	nodeVersion = process.versions.node,
+) {
 	const options = { cwd: root, encoding: 'utf8', env: hookEnv() } as const
-	const result =
-		existsSync(nvm) && existsSync(path.join(root, '.nvmrc'))
-			? spawnSync(
-					'bash',
-					[
-						'-c',
-						// nvm's messages go to stdout, its errors to stderr: keep
-						// only the errors, for the message.
-						[
-							`. "${nvm}" >/dev/null 2>&1`,
-							'if ! why=$(nvm use 2>&1 >/dev/null); then',
-							'  echo "nvm could not select the Node in .nvmrc, so npm run $0 did not run: $why" >&2',
-							'  exit 2',
-							'fi',
-							'npm run -s "$0"',
-						].join('\n'),
-						script,
-					],
-					options,
-				)
-			: spawnSync('npm', ['run', '-s', script], options)
+	const nvmrc = path.join(root, '.nvmrc')
+	const issue = existsSync(nvmrc)
+		? nodeVersionIssue(nodeVersion, readFileSync(nvmrc, 'utf8'))
+		: undefined
+	const refused = (why: string) => ({
+		status: 2,
+		output: `npm run ${script} did not run: ${why}\n`,
+	})
+	if (issue) {
+		const nvm = path.join(
+			process.env.NVM_DIR ?? path.join(homedir(), '.nvm'),
+			'nvm.sh',
+		)
+		if (!existsSync(nvm)) return refused(issue)
+		// nvm's errors go to stderr, its messages to stdout: on success the
+		// output is the PATH it built, on failure its reason.
+		const selected = spawnSync(
+			'bash',
+			[
+				'-c',
+				`. "$0" >/dev/null 2>&1; nvm use 2>&1 >/dev/null && printf '%s' "$PATH"`,
+				nvm,
+			],
+			options,
+		)
+		if (selected.status !== 0)
+			return refused(
+				`${issue} nvm could not select it: ${selected.stdout.trim()}`,
+			)
+		options.env.PATH = selected.stdout
+	}
+	const result = spawnSync('npm', ['run', '-s', script], options)
 	return {
 		status: result.status ?? 1,
 		output: `${result.stdout ?? ''}${result.stderr ?? ''}`,
