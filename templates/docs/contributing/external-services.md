@@ -21,6 +21,11 @@ admin).
 | Error tracking    | _fill in_                          |                               |                                                         |       |           |
 | Analytics         | _fill in_                          |                               |                                                         |       |           |
 
+A reviewer app listed in `reins.json` → `policy.reviewers` must be installed
+here: `npx reins doctor` reports one that has never run on the repo, and the
+merge policy refuses rather than waits for it
+([shipping-policy.md](./shipping-policy.md), Configuration).
+
 ## Setup checklist (once the repo is on GitHub)
 
 1. Enable Cursor Bugbot for the repository in the Cursor dashboard.
