@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { chmodSync } from 'node:fs'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -574,6 +574,235 @@ const pending = (what: string): Verdict => ({
 	waiting: what,
 })
 
+// What the policy wrote to the PR, read back from the stub's call log. Every
+// evaluation publishes (decision 0010), so the owner sees the same verdict on
+// GitHub as the agent sees in the terminal.
+// Runs the policy with the stub recording every gh call, so a test can see
+// what was written to the PR; `config` overrides reins.json policy for the run.
+async function published(
+	pr: Record<string, string>,
+	args: Array<string> = [],
+	config?: Record<string, unknown>,
+) {
+	const log = path.join(product, `gh-${Date.now()}-${Math.random()}.log`)
+	const saved = await readFile(path.join(product, 'reins.json'), 'utf8')
+	if (config) {
+		const current = JSON.parse(saved)
+		await writeFile(
+			path.join(product, 'reins.json'),
+			JSON.stringify({
+				...current,
+				policy: { ...current.policy, ...config },
+			}),
+		)
+	}
+	try {
+		const result = policy({ GH_LOG: log, ...pr }, args)
+		const calls = (await readFile(log, 'utf8').catch(() => ''))
+			.split('\n')
+			.filter(Boolean)
+		const writes = calls.filter(
+			(c) =>
+				c.startsWith('label create') || /^api -X (POST|DELETE|PATCH)/.test(c),
+		)
+		return { ...result, calls, writes }
+	} finally {
+		if (config) await writeFile(path.join(product, 'reins.json'), saved)
+		await rm(log, { force: true })
+	}
+}
+
+describe('merge policy: PR status', () => {
+	it('a parked PR gets needs-owner, the risk label, the owner assigned and the comment', async () => {
+		const r = await published({
+			FILES: 'modified:drizzle/x.ts',
+			CHANGE: 'adds',
+			CHECKS: BUGBOT,
+			REVIEWERS: 'coderabbitai devin-ai-integration',
+			LABELS: '["agent-merges","risk:medium","bug"]',
+		})
+		expect(r.allowed).toBe(false)
+		expect(r.message).toMatch(/needs the user/)
+		expect(r.writes).toContain(
+			'label create needs-owner --color d73a4a --description The shipping policy parked this PR for the owner to merge --force',
+		)
+		expect(r.writes).toContain(
+			'api -X DELETE repos/dom-kelly/demo/issues/7/labels/agent-merges',
+		)
+		expect(r.writes).toContain(
+			'api -X DELETE repos/dom-kelly/demo/issues/7/labels/risk:medium',
+		)
+		expect(
+			r.writes.some((w) => w.startsWith('api -X DELETE') && w.endsWith('/bug')),
+		).toBe(false)
+		expect(r.writes).toContain(
+			'api -X POST repos/dom-kelly/demo/issues/7/labels -f labels[]=needs-owner -f labels[]=risk:high',
+		)
+		expect(r.writes).toContain(
+			'api -X POST repos/dom-kelly/demo/issues/7/assignees -f assignees[]=dom-kelly',
+		)
+		const comment = r.writes.find((w) => w.includes('/issues/7/comments'))
+		expect(comment).toMatch(
+			/^api -X POST repos\/dom-kelly\/demo\/issues\/7\/comments -F body=@/,
+		)
+	})
+
+	it('an agent-mergeable PR gets agent-merges and no assignee; the same comment is not rewritten', async () => {
+		const r = await published({
+			FILES: 'modified:docs/x.md',
+			LABELS: '["needs-owner"]',
+			ASSIGNEES: '{"assignees":[{"login":"dom-kelly"}]}',
+		})
+		expect(r.allowed).toBe(true)
+		expect(r.writes).toContain(
+			'api -X DELETE repos/dom-kelly/demo/issues/7/labels/needs-owner',
+		)
+		expect(r.writes).toContain(
+			'api -X POST repos/dom-kelly/demo/issues/7/labels -f labels[]=agent-merges -f labels[]=risk:low',
+		)
+		expect(r.writes.some((w) => w.includes('/assignees'))).toBe(false)
+		expect(r.writes.some((w) => w.includes('/issues/7/comments'))).toBe(true)
+
+		// Already carrying the exact comment: nothing posted or patched.
+		const expected = [
+			'<!-- reins:policy -->',
+			'## Shipping policy',
+			'',
+			'**Agent merges.** low risk, CI green. Nothing needed from the owner.',
+			'',
+			'_Written by `npx reins policy` on every evaluation. Labels `needs-owner` / `agent-merges` / `risk:<tier>` say the same._',
+			'',
+		].join('\n')
+		const same = await published({
+			FILES: 'modified:docs/x.md',
+			LABELS: '["agent-merges","risk:low"]',
+			COMMENTS: JSON.stringify([expected]),
+		})
+		expect(same.writes.filter((w) => !w.startsWith('label create'))).toEqual([])
+
+		// A stale one is patched in place, never duplicated.
+		const stale = await published({
+			FILES: 'modified:docs/x.md',
+			LABELS: '["agent-merges","risk:low"]',
+			COMMENTS: JSON.stringify([
+				'<!-- reins:policy -->\n## Shipping policy\n\nold\n',
+			]),
+		})
+		expect(stale.writes.find((w) => w.includes('/comments'))).toMatch(
+			/^api -X PATCH repos\/dom-kelly\/demo\/issues\/comments\/100 -F body=@/,
+		)
+	})
+
+	it('a waiting verdict says what it waits for; a refusal says why', async () => {
+		const waiting = await published({
+			FILES: 'modified:docs/x.md',
+			CHECKS: '[{"name":"validate","conclusion":""}]',
+		})
+		expect(waiting.allowed).toBe(false)
+		expect(waiting.writes).toContain(
+			'api -X POST repos/dom-kelly/demo/issues/7/labels -f labels[]=agent-merges -f labels[]=risk:low',
+		)
+		const draft = await published({
+			FILES: 'modified:docs/x.md',
+			DRAFT: 'true',
+		})
+		expect(draft.writes).toContain(
+			'api -X POST repos/dom-kelly/demo/issues/7/labels -f labels[]=agent-merges',
+		)
+	})
+
+	it('an organisation repo is not assigned unless policy.owner names someone', async () => {
+		const park = {
+			FILES: 'modified:drizzle/x.ts',
+			CHANGE: 'adds',
+			CHECKS: BUGBOT,
+			REVIEWERS: 'coderabbitai devin-ai-integration',
+			OWNER_TYPE: 'Organization',
+		}
+		const org = await published(park)
+		expect(org.message).toMatch(/needs the user/)
+		expect(org.writes.some((w) => w.includes('/assignees'))).toBe(false)
+		const named = await published(park, [], { owner: 'dom' })
+		expect(named.writes).toContain(
+			'api -X POST repos/dom-kelly/demo/issues/7/assignees -f assignees[]=dom',
+		)
+	})
+
+	it('a write that fails never changes the verdict', async () => {
+		const r = policy({ FILES: 'modified:docs/x.md', LABEL_FAIL: '1' })
+		expect(r.allowed).toBe(true)
+		expect(r.status).toBe(0)
+	})
+
+	it('--no-publish and policy.publish:false write nothing', async () => {
+		const flag = await published({ FILES: 'modified:docs/x.md' }, [
+			'--no-publish',
+		])
+		expect(flag.allowed).toBe(true)
+		expect(flag.writes).toEqual([])
+		const config = await published({ FILES: 'modified:docs/x.md' }, [], {
+			publish: false,
+		})
+		expect(config.allowed).toBe(true)
+		expect(config.writes).toEqual([])
+	})
+
+	it('the repo owner’s review threads are findings unless ownerFindings is off', async () => {
+		const ownerThread = JSON.stringify([
+			{
+				isResolved: false,
+				comments: {
+					nodes: [{ author: { login: 'dom-kelly' }, body: 'please rename' }],
+				},
+			},
+		])
+		const medium = {
+			FILES: 'modified:app/routes/shopping.tsx',
+			CHECKS: BUGBOT,
+			THREADS: ownerThread,
+		}
+		// The product config lists findingsFrom explicitly, which replaces the default.
+		const defaults = {
+			reviewers: {
+				gate: [{ check: 'Cursor Bugbot', login: 'cursor' }],
+				required: ['coderabbitai', 'devin-ai-integration'],
+				ignoreChecks: ['CodeRabbit'],
+			},
+		}
+		expect((await published(medium, [], defaults)).message).toMatch(
+			/review finding\(s\) from dom-kelly not addressed/,
+		)
+		const fixed = JSON.stringify([
+			{
+				isResolved: false,
+				comments: {
+					nodes: [
+						{ author: { login: 'dom-kelly' }, body: 'please rename' },
+						{
+							author: { login: 'dom-kelly' },
+							body: 'Fixed in abc1234: renamed',
+						},
+					],
+				},
+			},
+		])
+		expect(
+			(await published({ ...medium, THREADS: fixed }, [], defaults)).allowed,
+		).toBe(true)
+		expect(
+			(await published(medium, [], { ...defaults, ownerFindings: false }))
+				.allowed,
+		).toBe(true)
+		// An organisation has no login to count.
+		expect(
+			(await published({ ...medium, OWNER_TYPE: 'Organization' }, [], defaults))
+				.allowed,
+		).toBe(true)
+		// An explicit list is taken as it is.
+		expect(policy(medium).allowed).toBe(true)
+	})
+})
+
 describe('merge policy: --wait', () => {
 	const done: Verdict = { allowed: true, message: 'ok', lines: ['l'] }
 
@@ -596,6 +825,18 @@ describe('merge policy: --wait', () => {
 			'policy: waiting for ci',
 			'policy: waiting for review',
 		])
+	})
+	it('publishes on each change of reason and once with the final verdict', async () => {
+		const verdicts = [pending('ci'), pending('ci'), pending('review'), done]
+		const seen: Array<string> = []
+		await waitForMerge('.', '7', {
+			intervalMs: 1,
+			evaluate: () => verdicts.shift()!,
+			sleep: async () => {},
+			onWait: () => {},
+			onVerdict: (v) => seen.push(v.waiting ?? v.message),
+		})
+		expect(seen).toEqual(['ci', 'review', 'ok'])
 	})
 	it('returns a refusal at once', async () => {
 		const no: Verdict = {

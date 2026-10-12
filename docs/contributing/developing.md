@@ -106,7 +106,7 @@ A release is a tag; products pin a range on tags
    needs neither.
 2. On merge, `.github/workflows/release.yml` tags main `v<version>` when no such
    tag exists.
-3. Products depend on `git+https://github.com/dom-kelly/reins.git#semver:^0.3.0`
+3. Products depend on `git+https://github.com/dom-kelly/reins.git#semver:^0.4.0`
    and take a release with `npm update @dom-kelly/reins && npx reins sync`. A
    new minor is taken by editing the spec; `reins adopt` writes the current
    major.minor and a test keeps `scaffold/app-node/package.json` on it.

@@ -9,10 +9,13 @@
 # "fail" makes that one lookup fail; default: three PRs on which every reviewer
 # the test config names has appeared), FAIL (any value makes every gh call fail).
 [ -n "${FAIL:-}" ] && { echo "stub gh: failing on purpose" >&2; exit 1; }
+# GH_LOG records every call, one argv line each, so a test can see the writes.
+[ -n "${GH_LOG:-}" ] && printf '%s\n' "$*" >>"$GH_LOG"
 DEF='[{"name":"validate","conclusion":"SUCCESS"}]'; CHECKS=${CHECKS:-$DEF}
 DEFPRS='[{"checks":["validate","Cursor Bugbot"],"logins":["cursor[bot]","coderabbitai"]},{"checks":["validate"],"logins":["devin-ai-integration[bot]"]},{"checks":["validate"],"logins":[]}]'
 PRS=${PRS:-$DEFPRS}
 HEAD=${HEAD:-abc1234}
+NOASSIGNEES='{"assignees":[]}'
 # A `case` inside `$( )` inside a case arm trips bash's parser, so build the
 # review list in a function.
 reviews() {
@@ -27,6 +30,11 @@ reviews() {
 }
 case "$*" in
   "repo view"*) echo "dom-kelly/demo" ;;
+  "api repos/dom-kelly/demo --jq"*) printf 'dom-kelly\t%s\n' "${OWNER_TYPE:-User}" ;;
+  "label create"*) [ -n "${LABEL_FAIL:-}" ] && { echo "stub gh: label create failing on purpose" >&2; exit 1; }; echo "✓ Label \"$3\" created" ;;
+  "api repos/dom-kelly/demo/issues/7/labels --jq"*) jq -r '.[]' <<<"${LABELS:-[]}" ;;
+  "pr view 7 --json assignees"*) echo "${ASSIGNEES:-$NOASSIGNEES}" ;;
+  "api -X POST"*|"api -X DELETE"*|"api -X PATCH"*) echo '{}' ;;
   "auth token"*) echo "gho_stub" ;;
   "api graphql"*"pullRequests("*) [ "$PRS" = fail ] && { echo "stub gh: presence lookup failing on purpose" >&2; exit 1; }
       jq -nc --argjson p "$PRS" '{data:{repository:{pullRequests:{nodes:[$p | to_entries[] | {number:(.key+1), reviews:{nodes:[.value.logins[]? | {author:{login:.}}]}, comments:{nodes:[]}, commits:{nodes:[{commit:{statusCheckRollup:{contexts:{nodes:[(.value.checks[]? | {name:.}), (.value.contexts[]? | {context:.})]}}}}]}}]}}}}' ;;
@@ -35,6 +43,7 @@ case "$*" in
 **Door:** \`${DOOR:-two-way}\`
 **Change:** \`${CHANGE-composes}\`" --argjson c "$CHECKS" --arg base "${BASE:-main}" --arg head "$HEAD" --argjson d "${DRAFT:-false}" \
       '{isDraft:$d,baseRefName:$base,headRefOid:$head,body:$b,statusCheckRollup:$c}' ;;
+  "api --paginate"*"/issues/"*"/comments"*"select("*) jq -c 'to_entries[] | select(.value | startswith("<!-- reins:policy -->")) | {id: (.key + 100), body: .value}' <<<"${COMMENTS:-[]}" ;;
   "api --paginate"*"/issues/"*"/comments"*) jq -c '.[] | {body: .}' <<<"${COMMENTS:-[]}" ;;
   "api --paginate"*"/pulls/"*"/commits"*) for c in ${COMMITS:-$HEAD}; do echo "$c"; done ;;
   "api --paginate"*"/files"*) for f in $FILES; do st=${f%%:*} p=${f#*:}

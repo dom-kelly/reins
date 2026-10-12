@@ -24,7 +24,8 @@
 			"Bash(git log *)",
 			"Bash(gh issue list *)",
 			"Bash(gh pr view *)",
-			"Bash(gh pr checks *)"
+			"Bash(gh pr checks *)",
+			"Bash(gh pr merge *)"
 		]
 	},
 	"hooks": {

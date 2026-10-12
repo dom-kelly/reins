@@ -57,6 +57,32 @@ refused, 1 gave up after `--timeout <seconds>` (default 20 minutes), saying what
 it was still waiting for. Prefer it to polling `gh pr checks`, which can report
 the previous run right after a push.
 
+## Status on the PR
+
+Every evaluation (`npx reins policy`, `--wait`, and the guard on `gh pr merge`)
+writes the verdict to the PR, so the owner reads GitHub rather than the agent's
+terminal:
+
+- **Labels.** Exactly one of `needs-owner` (the policy parked it: the owner
+  merges) or `agent-merges` (the agent finishes it: allowed, waiting on CI or a
+  reviewer, or refused with something the agent must fix), plus
+  `risk:low|medium|high` once the risk is known. Created on first use with
+  `gh label create --force`; other labels are never touched. Filter the PR list
+  on `needs-owner` to see what is yours.
+- **Assignee.** A parked PR is assigned to `policy.owner`, or to the repo owner
+  when the repo belongs to a user. An organisation repo needs `policy.owner`
+  set, else nobody is assigned.
+- **One comment**, first line `<!-- reins:policy -->`, heading
+  `## Shipping policy`, saying who acts and why, with the merge command when
+  parked. It is updated in place, never duplicated, and only when the text
+  changes.
+
+The policy is the only writer. Agents and owners do not set these by hand; a
+write that fails is reported as `policy: could not write PR status (…)` and
+never changes the verdict. `policy.publish: false` switches the writes off;
+`--no-publish` does so for one run. The agent's final summary uses the same
+vocabulary: `Shipped`, `Needs you: <action>`, or `Blocked: <what>`.
+
 ## After merge
 
 The head branch does not outlive the PR: the guard requires `--delete-branch` on
@@ -78,6 +104,12 @@ seven hex characters) or `wontfix: <reason>`. This is an honour system: the
 policy checks the words, not the diff. Reviewers not listed are read and handled
 on merit but do not block.
 
+The repo owner's own review threads count too: when the repo belongs to a user,
+that login is added to the default `findingsFrom` (`policy.ownerFindings: false`
+turns this off; an explicit `findingsFrom` list replaces the default). So a
+comment the owner leaves on a PR is answered before an agent merges medium or
+high, not merely read.
+
 The independent review comment (`## Independent review`, `head: <sha>`) works
 the same way: the policy checks that a review of a commit on the branch was
 posted, not its quality. Findings it raises are fixed and get a
@@ -94,6 +126,9 @@ enforcement ladder in [harness-engineering.md](./harness-engineering.md).
 	"ciCheck": "validate",
 	"authority": { "low": "agent", "medium": "agent", "high": "owner" },
 	"independentReview": true,
+	"publish": true,
+	"owner": "your-login",
+	"ownerFindings": true,
 	"reviewers": {
 		"gate": [{ "check": "Cursor Bugbot", "login": "cursor" }],
 		"required": ["coderabbitai", "devin-ai-integration"],
@@ -129,5 +164,9 @@ then.
 
 ## Asking
 
-When the policy parks a PR, the agent stops with everything ready, says which
-rule applied, and links the PR. The owner reviews and merges.
+When the policy parks a PR, the agent stops with everything ready, says
+`Needs you: <action>` with the rule that applied, and links the PR. On GitHub
+the PR is labelled `needs-owner`, assigned to the owner and carries the
+`## Shipping policy` comment with the merge command. The owner reviews and
+merges, or comments what to change: that comment is a finding the agent must
+answer.
