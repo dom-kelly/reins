@@ -37,6 +37,16 @@ export type HarnessConfig = {
 		 *  a 300 second budget and a timeout does not block, so a slow gate fails
 		 *  open on exactly the runs that matter. */
 		stopGate?: string
+		/** The npm script the Claude Code PostToolUse typecheck hook runs after
+		 *  a TypeScript edit. Default `typecheck`. Point it at a fast script
+		 *  (one project, no typegen) when the full one is slow: it runs on
+		 *  every edit. */
+		typecheck?: string
+		/** Path prefixes, relative to the repo root, whose edits do not trigger
+		 *  the typecheck hook (generated or vendored code). A `node_modules`,
+		 *  `dist`, `build` or `.react-router` directory anywhere in the tree is
+		 *  always skipped. */
+		typecheckIgnore?: Array<string>
 	}
 	/** Who may merge at each risk tier and which reviewers must have spoken. */
 	policy?: PolicyConfig
