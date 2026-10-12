@@ -37,7 +37,7 @@ When an agent is the one merging medium or high, the PR also needs the
 independent review that `ship-pr` posts: an issue comment whose first line is
 `## Independent review` and which has a line `head: <sha>` naming the current
 head or an earlier commit of the branch (so fixes pushed after the review keep
-it valid; a sha that is not on the branch does not count). `owner` tiers are
+it valid; a sha that is not on the branch is refused). `owner` tiers are
 unaffected. `policy.independentReview: false` switches it off.
 
 Always: not a draft, targets `main`, no test file deleted, no other check red or
@@ -50,7 +50,9 @@ merging through the API are refused outright.
 something that may still arrive: a check still running or not yet reported on
 the current head, a gate or required reviewer that has not spoken, the
 independent review comment. It reads the head afresh each poll, so a push during
-the wait is followed. It then prints the verdict as usual: exit 0 may merge, 2
+the wait is followed, and a `gh` call that fails mid-wait is retried a few times
+before it counts. A failed check, or a review comment that names a wrong commit,
+is refused at once. It then prints the verdict as usual: exit 0 may merge, 2
 refused, 1 gave up after `--timeout <seconds>` (default 20 minutes), saying what
 it was still waiting for. Prefer it to polling `gh pr checks`, which can report
 the previous run right after a push.

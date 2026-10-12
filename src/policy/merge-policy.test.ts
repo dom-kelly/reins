@@ -206,6 +206,25 @@ describe('merge policy: who may merge', () => {
 			/waiting for the validate check to start on abc1234/,
 		],
 		[
+			'the gate check as a pending status context is waited for',
+			{
+				FILES: 'modified:docs/x.md',
+				CHECKS: '[{"context":"validate","state":"PENDING"}]',
+			},
+			false,
+			/waiting for the validate check to finish/,
+		],
+		[
+			'a failed check is refused before a running one is waited for',
+			{
+				FILES: 'modified:docs/x.md',
+				CHECKS:
+					'[{"name":"validate","conclusion":"SUCCESS"},{"name":"slow","status":"IN_PROGRESS"},{"name":"fast","conclusion":"FAILURE"}]',
+			},
+			false,
+			/checks not green: fast=FAILURE/,
+		],
+		[
 			'deleting a test',
 			{ FILES: 'removed:tests/app/meals.test.ts' },
 			false,
@@ -332,15 +351,15 @@ describe('merge policy: independent review (medium and high merged by an agent)'
 		)
 		expect(result.allowed).toBe(false)
 	})
-	it('refuses a comment that names a sha not on the branch', () => {
-		const result = policy({
-			...medium,
-			COMMENTS: review('9999999'),
-			COMMITS: 'def5678 abc1234',
-		})
-		expect(result.message).toMatch(/not on this branch|a commit on this branch/)
-		expect(result.message).toMatch(/9999999/)
-		expect(result.allowed).toBe(false)
+	it('refuses a comment that names a sha not on the branch, without waiting', () => {
+		const result = policy(
+			{ ...medium, COMMENTS: review('9999999'), COMMITS: 'def5678 abc1234' },
+			['--wait'],
+		)
+		expect(result.message).toMatch(
+			/Merge refused: the independent review names no commit of this branch \(head: 9999999; the head is abc1234\)/,
+		)
+		expect(result.status).toBe(2)
 	})
 	it('accepts a review of an earlier commit on the branch (fixes pushed after it)', () => {
 		expect(
@@ -351,13 +370,40 @@ describe('merge policy: independent review (medium and high merged by an agent)'
 			}),
 		).toMatchObject({ allowed: true })
 	})
-	it('refuses a comment with no head line', () => {
-		const result = policy({
-			...medium,
-			COMMENTS: JSON.stringify(['## Independent review\nNo defects found']),
-		})
-		expect(result.message).toMatch(/name the commit it reviewed/)
-		expect(result.allowed).toBe(false)
+	it('matches the sha by prefix, whatever the case', () => {
+		const long = 'ABC1234ABC1234ABC1234ABC1234ABC1234ABC12'
+		expect(
+			policy({
+				...medium,
+				HEAD: long.toLowerCase(),
+				COMMENTS: review('abc1234ab'),
+			}),
+		).toMatchObject({ allowed: true })
+		expect(
+			policy({ ...medium, HEAD: long.toLowerCase(), COMMENTS: review(long) }),
+		).toMatchObject({ allowed: true })
+	})
+	it('one valid review among stale ones is enough', () => {
+		expect(
+			policy({
+				...medium,
+				COMMENTS: JSON.stringify([
+					'## Independent review\nhead: 9999999',
+					'## Independent review\nhead: abc1234\nNo defects found',
+				]),
+			}),
+		).toMatchObject({ allowed: true })
+	})
+	it('refuses a comment with no head line, without waiting', () => {
+		const result = policy(
+			{
+				...medium,
+				COMMENTS: JSON.stringify(['## Independent review\nNo defects found']),
+			},
+			['--wait'],
+		)
+		expect(result.message).toMatch(/names no commit; add 'head: abc1234'/)
+		expect(result.status).toBe(2)
 	})
 	it('ignores a comment whose first line is something else', () => {
 		const result = policy({
@@ -464,6 +510,35 @@ describe('merge policy: --wait', () => {
 		})
 		expect(result).toEqual(no)
 		expect(polls).toBe(1)
+	})
+	it('retries a few failed reads mid-wait, but not on the first poll', async () => {
+		const unread: Verdict = {
+			allowed: false,
+			message: "Merge refused: couldn't read the PR.",
+			lines: [],
+			unread: true,
+		}
+		const blips = [pending('ci'), unread, unread, done]
+		const result = await waitForMerge('.', '7', {
+			evaluate: () => blips.shift()!,
+			sleep: async () => {},
+			onWait: () => {},
+		})
+		expect(result).toEqual(done)
+		const first = await waitForMerge('.', '7', {
+			evaluate: () => unread,
+			sleep: async () => {},
+			onWait: () => {},
+		})
+		expect(first).toEqual(unread)
+		const persistent = [pending('ci'), unread, unread, unread, unread]
+		expect(
+			await waitForMerge('.', '7', {
+				evaluate: () => persistent.shift()!,
+				sleep: async () => {},
+				onWait: () => {},
+			}),
+		).toEqual(unread)
 	})
 	it('gives up after the timeout, saying what it was still waiting for', async () => {
 		const result = await waitForMerge('.', '7', {

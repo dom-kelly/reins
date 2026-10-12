@@ -54,6 +54,9 @@ export type Verdict = {
 	/** Set when the refusal is for something that may still arrive (a check
 	 *  running, a review not yet posted): `--wait` polls while this is set. */
 	waiting?: string
+	/** Set when the refusal is that `gh` could not be read; `--wait` retries a
+	 *  few times before believing it. */
+	unread?: boolean
 }
 
 export type WaitOptions = {
@@ -205,6 +208,10 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 		...no(`waiting for ${what}`),
 		waiting: what,
 	})
+	const unread = (message: string): Verdict => ({
+		...no(message),
+		unread: true,
+	})
 
 	let sources: ReturnType<typeof policySources>
 	try {
@@ -283,7 +290,7 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 			.filter(Boolean)
 			.map((line) => JSON.parse(line) as PullFile)
 	} catch (error) {
-		return no(
+		return unread(
 			`couldn't read the PR (${error instanceof Error ? error.message.split('\n')[0] : String(error)})`,
 		)
 	}
@@ -346,18 +353,21 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 	if (notFinished.has(ci.state))
 		return wait(`the ${ciCheck} check to finish on ${info.headRefOid}`)
 	if (ci.state !== 'SUCCESS') return no(`the ${ciCheck} check hasn't passed`)
+	// A failed check is refused before a slow one is waited for.
 	const unsettled = checks.filter((c) => !ignoreChecks.has(c.name))
-	const running = unsettled.filter((c) => notFinished.has(c.state))
-	if (running.length)
-		return wait(
-			`checks to finish: ${running.map((c) => `${c.name}=${c.state || 'RUNNING'}`).join(' ')}`,
-		)
 	const red = unsettled.filter(
-		(c) => !['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(c.state),
+		(c) =>
+			!notFinished.has(c.state) &&
+			!['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(c.state),
 	)
 	if (red.length)
 		return no(
 			`checks not green: ${red.map((c) => `${c.name}=${c.state}`).join(' ')}`,
+		)
+	const running = unsettled.filter((c) => notFinished.has(c.state))
+	if (running.length)
+		return wait(
+			`checks to finish: ${running.map((c) => `${c.name}=${c.state || 'RUNNING'}`).join(' ')}`,
 		)
 
 	const park = (why: string): Verdict => ({
@@ -403,7 +413,7 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 			),
 		)
 	} catch {
-		return no("couldn't read review threads")
+		return unread("couldn't read review threads")
 	}
 	const pull = threads.data.repository.pullRequest
 	const open = pull.reviewThreads.nodes.filter((t) => {
@@ -422,15 +432,17 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 	}
 	// An agent merging medium or high needs the fresh-context review that
 	// ship-pr posts, on this head or an earlier commit of the branch. Like
-	// `Fixed in`, this checks that the review happened, not its quality.
+	// `Fixed in`, this checks that the review happened, not its quality. Only
+	// a missing comment is waited for; a wrong one needs the agent to act.
 	if (authority[risk] === 'agent' && (policy.independentReview ?? true)) {
-		let missing: string | undefined
+		let review: ReturnType<typeof independentReview>
 		try {
-			missing = independentReviewMissing(root, repo, pr, info.headRefOid)
+			review = independentReview(root, repo, pr, info.headRefOid)
 		} catch {
-			return no("couldn't read the PR's comments")
+			return unread("couldn't read the PR's comments")
 		}
-		if (missing) return wait(`${missing} (risk=${risk})`)
+		if (review.missing) return wait(`${review.missing} (risk=${risk})`)
+		if (review.wrong) return no(`${review.wrong} (risk=${risk})`)
 		lines.push(`policy: PR #${pr} independent review found for the head`)
 	}
 	if (risk === 'medium') {
@@ -454,15 +466,16 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 	return authority.high === 'agent' ? yes(why) : park(why)
 }
 
-/** Why no `## Independent review` comment covers `head`, or undefined when
- *  one does. The comment's `head:` must name the head or a commit of the PR
- *  (so fixes pushed after the review keep it valid; a rebase does not). */
-function independentReviewMissing(
+/** Whether a `## Independent review` comment covers `head`: `missing` when
+ *  none is posted yet, `wrong` when one is but names no commit of the PR. The
+ *  `head:` may be an earlier commit of the branch (fixes pushed after the
+ *  review keep it valid; a rebase does not), matched by prefix. */
+function independentReview(
 	root: string,
 	repo: string,
 	pr: string,
 	head: string,
-): string | undefined {
+): { missing?: string; wrong?: string } {
 	const comments = gh(
 		[
 			'api',
@@ -477,11 +490,17 @@ function independentReviewMissing(
 		.filter(Boolean)
 		.map((line) => (JSON.parse(line) as { body?: string }).body ?? '')
 		.filter((body) => body.split('\n')[0]?.trim() === reviewHeading)
-	if (!comments.length)
-		return `an independent review: post a comment whose first line is '${reviewHeading}' with 'head: ${head}'`
+	if (!comments.length) {
+		return {
+			missing: `an independent review: post a comment whose first line is '${reviewHeading}' with 'head: ${head}'`,
+		}
+	}
 	const shas = comments.flatMap((body) => reviewHead.exec(body)?.[1] ?? [])
-	if (!shas.length)
-		return `the independent review comment to name the commit it reviewed ('head: ${head}')`
+	if (!shas.length) {
+		return {
+			wrong: `the independent review comment names no commit; add 'head: ${head}'`,
+		}
+	}
 	const commits = gh(
 		[
 			'api',
@@ -497,8 +516,10 @@ function independentReviewMissing(
 	commits.push(head)
 	const onBranch = (sha: string) =>
 		commits.some((c) => c.toLowerCase().startsWith(sha.toLowerCase()))
-	if (shas.some(onBranch)) return undefined
-	return `an independent review of a commit on this branch (found head: ${shas.join(', ')}; the head is ${head})`
+	if (shas.some(onBranch)) return {}
+	return {
+		wrong: `the independent review names no commit of this branch (head: ${shas.join(', ')}; the head is ${head})`,
+	}
 }
 
 /** `reins policy --wait`: re-evaluates every `intervalMs` while the verdict
@@ -518,9 +539,20 @@ export async function waitForMerge(
 ): Promise<Verdict & { timedOut?: boolean }> {
 	const started = Date.now()
 	let last: string | undefined
+	let polls = 0
+	let unread = 0
 	for (;;) {
 		const verdict = evaluate(root, prRef)
+		polls++
+		// A read that fails once we have seen the PR is more likely a blip in
+		// gh or the network than a refusal; the first poll fails fast on a bad
+		// PR reference.
+		if (verdict.unread && polls > 1 && ++unread <= 3) {
+			await sleep(intervalMs)
+			continue
+		}
 		if (verdict.waiting === undefined) return verdict
+		unread = 0
 		if (verdict.waiting !== last) {
 			onWait(`policy: waiting for ${verdict.waiting}`)
 			last = verdict.waiting
