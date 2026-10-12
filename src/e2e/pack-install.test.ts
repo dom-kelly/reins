@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -94,6 +94,67 @@ test('a product built from the packed package passes its own validate', async ()
 		expect(installed.status, installed.stderr).toBe(2)
 		expect(installed.stderr).toContain('Pushing straight to main')
 		expect(installed.stderr).not.toContain('did not run')
+	} finally {
+		await rm(dir, { recursive: true, force: true })
+	}
+})
+
+// Products install from a git URL, not a tarball: npm clones the repo at the
+// resolved commit, installs the devDependencies in that clone, runs
+// scripts/prepare.mjs there (twice: on the install and again when it packs)
+// and packs what is left. A devDependency missing from package.json, a prepare
+// that assumes its cwd, or husky misbehaving in a throwaway clone fail only on
+// this path. npm clones HEAD, so uncommitted changes are not exercised; the
+// pre-push hook runs the tests and validate runs before a PR, so in practice
+// HEAD is what ships.
+test('a product that installs the package from git passes its own validate', async () => {
+	const dir = await mkdtemp(path.join(tmpdir(), 'harness-e2e-git-'))
+	try {
+		const cli = path.join(packageRoot, 'dist/bin/reins.js')
+		if (!existsSync(cli)) {
+			// Scaffold with the built CLI as a product would; the tarball lane
+			// builds it as a side effect of npm pack, so only build when it ran
+			// first and found nothing.
+			const build = run('npm', ['run', '-s', 'build'], packageRoot)
+			expect(build.code, build.out).toBe(0)
+		}
+		const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
+			cwd: packageRoot,
+			encoding: 'utf8',
+		}).trim()
+
+		const product = path.join(dir, 'demo-product')
+		const created = run(
+			'node',
+			[cli, 'new', product, '--no-install', '--no-git'],
+			dir,
+		)
+		expect(created.code, created.out).toBe(0)
+
+		const pkgFile = path.join(product, 'package.json')
+		const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'))
+		pkg.devDependencies['@dom-kelly/reins'] = `git+file://${packageRoot}#${sha}`
+		writeFileSync(pkgFile, `${JSON.stringify(pkg, null, '\t')}\n`)
+
+		// npm captures the clone's install and prepare output and prints it
+		// only in its own error log, so the whole output is the failure message.
+		const install = run('npm', ['install', '--no-audit', '--no-fund'], product)
+		expect(install.code, `npm install from git failed:\n${install.out}`).toBe(0)
+		const installedCli = path.join(
+			product,
+			'node_modules/@dom-kelly/reins/dist/bin/reins.js',
+		)
+		expect(
+			existsSync(installedCli),
+			'prepare in the clone should have built dist/',
+		).toBe(true)
+
+		const helpText = run('npx', ['reins', '--help'], product)
+		expect(helpText.code, helpText.out).toBe(0)
+		expect(helpText.out).toContain('reins sync')
+
+		const validate = run('npm', ['run', '-s', 'validate'], product)
+		expect(validate.code, validate.out).toBe(0)
 	} finally {
 		await rm(dir, { recursive: true, force: true })
 	}
