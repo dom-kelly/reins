@@ -79,8 +79,9 @@ place are in [growth.md](./growth.md).
 
 - `git push` and `gh pr merge` always ask the owner.
 - A PreToolUse hook (`the harness guard hook (`npx reins hook guard-bash`)`)
-  blocks force-pushes, `--no-verify`, `git reset --hard`, and `git clean -f`,
-  with a message saying what to do instead.
+  blocks force-pushes, `--no-verify`, `git reset --hard`, `git clean -f`, and a
+  `gh pr merge` without `--delete-branch`, with a message saying what to do
+  instead.
 - The guard and typecheck hooks refuse to run (exit 2) when the harness is not
   installed, so an uninstalled harness blocks rather than silently allows;
   `npm install` fixes it. The Stop hook only warns, since an agent cannot repair

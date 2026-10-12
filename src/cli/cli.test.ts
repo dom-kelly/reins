@@ -26,13 +26,14 @@ import {
 	baseDir,
 	dependencySpec,
 	legacyBaseDir,
+	loadManifest,
 	mergeThreeWay,
 	migratePackageJson,
 	syncTemplates,
 } from '../lib/templates.ts'
 import { adoptRepo, patchPackageJson } from './adopt.ts'
 import { parseArgs } from './args.ts'
-import { doctor } from './doctor.ts'
+import { doctor, doctorPassed, formatDoctor } from './doctor.ts'
 import { createProduct } from './new.ts'
 
 async function tmp(prefix: string) {
@@ -214,6 +215,35 @@ test('the harness uses the same skills it ships (copies, not a symlink)', async 
 	}
 })
 
+// A template that is in neither list is never written, so it would ship to
+// nobody; an entry with no file would break every new/adopt/sync.
+test('every template is in the manifest exactly once, and every entry exists', async () => {
+	const templates = path.join(packageRoot, 'templates')
+	const onDisk = (
+		await readdir(templates, { recursive: true, withFileTypes: true })
+	)
+		.filter((entry) => entry.isFile())
+		.map((entry) =>
+			path.relative(templates, path.join(entry.parentPath, entry.name)),
+		)
+		.filter((rel) => rel !== 'manifest.json')
+		.toSorted()
+	const { managed, owned } = loadManifest()
+	const listed = [...managed, ...owned]
+	expect(listed.toSorted()).toEqual(onDisk)
+	expect(new Set(listed).size).toBe(listed.length)
+})
+
+// Workflows are dogfooded by copy, like the skills; validate.yml differs on
+// purpose (the harness clones no git dependency), so it is not compared.
+test('the merged-branch workflow is the same file the harness ships', async () => {
+	const rel = '.github/workflows/merged-branch.yml'
+	expect(
+		await readFile(path.join(packageRoot, rel), 'utf8'),
+		`${rel} differs: cp templates/${rel} ${rel}`,
+	).toBe(await readFile(path.join(packageRoot, 'templates', rel), 'utf8'))
+})
+
 type Hook = { command: string; onFailure?: string }
 type Settings = { hooks: Record<string, Array<{ hooks: Array<Hook> }>> }
 
@@ -295,6 +325,30 @@ test('sync records the CLI version in reins.json; --check does not', async () =>
 		expect(readConfig(root)).toEqual({ harness: packageVersion, product: vars })
 	} finally {
 		await rm(dir, { recursive: true, force: true })
+	}
+})
+
+test('doctor: an info item never fails the run and prints as a note', async () => {
+	const root = await tmp('doctor-info')
+	try {
+		// No GitHub origin here, so there is no line about GitHub's auto-delete.
+		const items = doctor(root)
+		expect(items.some((i) => i.info)).toBe(false)
+		const info = {
+			label: 'GitHub does not delete merged branches itself',
+			ok: false,
+			fix: 'gh repo edit --delete-branch-on-merge',
+			info: true,
+		}
+		expect(doctorPassed([{ label: 'x', ok: true, fix: '' }, info])).toBe(true)
+		expect(doctorPassed([{ label: 'x', ok: false, fix: 'y' }, info])).toBe(
+			false,
+		)
+		expect(formatDoctor([info])).toBe(
+			'ℹ️ GitHub does not delete merged branches itself → gh repo edit --delete-branch-on-merge',
+		)
+	} finally {
+		await rm(root, { recursive: true, force: true })
 	}
 })
 

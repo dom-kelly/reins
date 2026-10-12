@@ -191,7 +191,9 @@ test('guard blocks force push, push to main, no-verify, destructive resets, admi
 	expect(findBlockedReason('gh pr merge 7 --admin')).toBeDefined()
 	expect(findBlockedReason('git push -u origin feature')).toBeUndefined()
 	expect(findBlockedReason('git push origin maintenance-fix')).toBeUndefined()
-	expect(findBlockedReason('gh pr merge 7 --squash')).toBeUndefined()
+	expect(
+		findBlockedReason('gh pr merge 7 --squash --delete-branch'),
+	).toBeUndefined()
 	expect(findBlockedReason('git status')).toBeUndefined()
 	expect(
 		findBlockedReason('npx wrangler deploy', [
@@ -336,14 +338,14 @@ test('guard refuses API and cross-repo merges, and blocks when the policy cannot
 	).toMatch(/another repo/)
 	expect(
 		guardDecision(
-			cmd('gh pr merge 7 --squash'),
+			cmd('gh pr merge 7 --squash --delete-branch'),
 			undefined,
 			'/nonexistent-root-for-policy',
 		),
 	).toMatch(/Merge refused/)
 	expect(
 		guardDecision(
-			cmd('gh pr merge 7'),
+			cmd('gh pr merge 7 -d'),
 			{
 				harness: '0',
 				product: { name: 'x' },
@@ -352,4 +354,45 @@ test('guard refuses API and cross-repo merges, and blocks when the policy cannot
 			'/nonexistent',
 		),
 	).toBeUndefined()
+})
+
+test('guard requires --delete-branch on gh pr merge, before the policy runs', () => {
+	const deleteBranch = /--delete-branch/
+	// Without the flag: refused by the pattern, not by the (unrunnable) policy.
+	for (const command of [
+		'gh pr merge 7',
+		'gh pr merge 7 --squash',
+		'gh pr merge --squash https://github.com/o/r/pull/7',
+		'gh pr merge 7 --delete-branch=false',
+		'gh pr merge 7 -s && git pull',
+		'gh pr merge 7 --subject done',
+	]) {
+		expect(findBlockedReason(command), command).toMatch(deleteBranch)
+		expect(
+			guardDecision(cmd(command), undefined, '/nonexistent-root-for-policy'),
+			command,
+		).toMatch(deleteBranch)
+	}
+	// With it (long, short, or bundled): on to the policy.
+	for (const command of [
+		'gh pr merge 7 --squash --delete-branch',
+		'gh pr merge 7 --delete-branch --squash',
+		'gh pr merge 7 --delete-branch=true',
+		'gh pr merge 7 -d',
+		'gh pr merge 7 -sd',
+		'gh pr merge 7 -ds',
+		'gh pr merge -d 7; git pull',
+	]) {
+		expect(findBlockedReason(command), command).toBeUndefined()
+		expect(
+			guardDecision(cmd(command), undefined, '/nonexistent-root-for-policy'),
+			command,
+		).toMatch(/Merge refused/)
+	}
+	// --admin is still the reason given when both are missing or wrong.
+	expect(findBlockedReason('gh pr merge 7 --admin --delete-branch')).toMatch(
+		/--admin/,
+	)
+	expect(findBlockedReason('gh pr merge 7 --admin')).toMatch(/--admin/)
+	expect(findBlockedReason('gh pr view 7')).toBeUndefined()
 })

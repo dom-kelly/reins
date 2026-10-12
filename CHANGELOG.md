@@ -4,6 +4,14 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.2.2] - 2026-10-12
+
+- A merged PR's head branch no longer outlives it: a managed workflow
+  (`.github/workflows/merged-branch.yml`) deletes the branch of any merged PR,
+  the guard refuses `gh pr merge` without `--delete-branch`, and `reins doctor`
+  says whether GitHub's own auto-delete is on. A test now fails when a file
+  under `templates/` is missing from the manifest.
+
 ## [0.2.1] - 2026-10-12
 
 - A git-install e2e lane: a product now also installs the package the way

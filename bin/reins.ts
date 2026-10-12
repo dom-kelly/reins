@@ -9,7 +9,7 @@ import {
 import { reportChecks, runChecks } from '../src/checks/run.ts'
 import { adoptRepo, formatAdoptReport } from '../src/cli/adopt.ts'
 import { parseArgs } from '../src/cli/args.ts'
-import { doctor, formatDoctor } from '../src/cli/doctor.ts'
+import { doctor, doctorPassed, formatDoctor } from '../src/cli/doctor.ts'
 import { createProduct } from '../src/cli/new.ts'
 import { runGitHook } from '../src/hooks/git-hooks.ts'
 import {
@@ -97,7 +97,7 @@ async function main(): Promise<number> {
 		case 'doctor': {
 			const items = doctor(root)
 			console.log(formatDoctor(items))
-			return items.every((i) => i.ok) ? 0 : 1
+			return doctorPassed(items) ? 0 : 1
 		}
 		case 'policy': {
 			const verdict = evaluateMerge(root, positionals[0])

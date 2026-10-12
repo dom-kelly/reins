@@ -1,0 +1,49 @@
+name: Merged branch
+
+# Deletes a PR's head branch once the PR is merged, however it was merged (the
+# CLI, the web UI, another tool), so a branch does not outlive its PR. GitHub's
+# "automatically delete head branches" setting does the same, but a setting is
+# not in any file and does not reach the next repo; this workflow is synced.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  delete-head-branch:
+    # A merge only, and only a branch of this repo: a fork's branch is theirs
+    # (head.repo is null when the fork has since been deleted).
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # Through env, not inline: a branch name is input, not code.
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+    steps:
+      - name: Delete the head branch
+        run: |
+          set -euo pipefail
+          case "$HEAD_REF" in
+            main | master | "$BASE_REF")
+              echo "::notice::$HEAD_REF is a base branch; nothing to delete"
+              exit 0 ;;
+          esac
+          if out=$(gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$HEAD_REF" 2>&1); then
+            echo "::notice::deleted $HEAD_REF"
+            exit 0
+          fi
+          # GitHub's own auto-delete, or a person, may have got there first.
+          case "$out" in
+            *"(HTTP 422)"* | *"(HTTP 404)"*)
+              echo "::notice::$HEAD_REF was already deleted"
+              exit 0 ;;
+          esac
+          echo "::error::could not delete $HEAD_REF: $out"
+          exit 1
