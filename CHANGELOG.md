@@ -4,6 +4,18 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.2.7] - 2026-10-12
+
+- The husky hooks fail closed: `.husky/pre-commit` and `pre-push` now run
+  `npx --no-install reins hook …`, so a product whose `node_modules` lacks the
+  harness gets "reins is not installed: run npm install" instead of npx fetching
+  whatever the public registry has under `reins` (the hazard of decision 0006,
+  which the Claude hooks already closed). A test keeps every `npx reins hook` a
+  template ships on `--no-install`.
+- The merged-branch workflow URL-encodes the head branch before the
+  `DELETE /git/refs/heads/…` call, so a name with `#` or `%` hits the right ref
+  (slashes stay literal); the skip and already-deleted cases are unchanged.
+
 ## [0.2.6] - 2026-10-12
 
 - The independent review is on the PR and the policy checks for it: when an

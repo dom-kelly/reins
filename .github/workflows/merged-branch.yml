@@ -35,7 +35,10 @@ jobs:
               echo "::notice::$HEAD_REF is a base branch; nothing to delete"
               exit 0 ;;
           esac
-          if out=$(gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$HEAD_REF" 2>&1); then
+          # Encoded: a branch may contain "#" or "%", which would change the path.
+          # The "/" stays, so GitHub still sees a ref under heads/.
+          ref=$(jq -rn --arg b "$HEAD_REF" '$b | @uri | gsub("%2F"; "/")')
+          if out=$(gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$ref" 2>&1); then
             echo "::notice::deleted $HEAD_REF"
             exit 0
           fi
