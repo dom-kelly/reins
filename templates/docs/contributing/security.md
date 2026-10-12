@@ -8,7 +8,8 @@ reporting for outsiders is in [SECURITY.md](../../SECURITY.md).
 
 Each entry references an invariant id in
 [primitives.yaml](./architecture/primitives.yaml). A PR touching one says so in
-its description and counts as at least medium risk.
+its description and declares at least `extends` (medium); the policy itself only
+reads the primitive's `floor`, so set `floor: medium` there to enforce it.
 
 | Invariant id         | Why it matters                                  |
 | -------------------- | ----------------------------------------------- |
