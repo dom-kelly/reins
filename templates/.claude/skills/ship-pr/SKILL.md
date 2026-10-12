@@ -22,9 +22,8 @@ PR.
    medium.
 2. **Validate.** `npm run validate`. Fix failures. Do not weaken a check to
    pass; if a check is wrong, fix the checker with a test.
-3. **Draft first.** If pushing is allowed, open the PR as a draft while
-   iterating so CI does not run on every commit. Mark it ready only when
-   validate is green locally.
+3. **Draft first.** Open the PR as a draft while iterating so CI does not run on
+   every commit. Mark it ready only when validate is green locally.
 4. **Review (medium+).** Wait for the AI reviewers (see **AI reviewers** below)
    and address valid feedback. Also spawn one fresh sub-agent with only the
    intent, the diff, and the relevant docs; never review your own work.

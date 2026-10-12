@@ -15,7 +15,7 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
   repo for the earlier implementations; the decisions index names
   `npx reins check`. A test keeps retired wording (`npx harness`,
   `harness.json`, "always ask the owner", …) out of every markdown file under
-  `templates/`, `docs/` and the README.
+  `templates/` and `docs/`, the README and `CLAUDE.md`.
 
 ## [0.2.3] - 2026-10-12
 
