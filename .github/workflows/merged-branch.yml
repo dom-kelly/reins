@@ -40,8 +40,9 @@ jobs:
             exit 0
           fi
           # GitHub's own auto-delete, or a person, may have got there first.
+          # Only that 422; a protected branch is also a 422 and must fail.
           case "$out" in
-            *"(HTTP 422)"* | *"(HTTP 404)"*)
+            *"Reference does not exist"* | *"(HTTP 404)"*)
               echo "::notice::$HEAD_REF was already deleted"
               exit 0 ;;
           esac

@@ -43,11 +43,12 @@ export const defaultBlocked: ReadonlyArray<BlockedPattern> = [
 	{
 		regex: /\bgh\s+pr\s+merge\b[^|;&]*\s--(?:admin|auto)\b/,
 		reason:
-			'Merging with --admin or --auto skips the shipping policy. Use a plain `gh pr merge` or hand it to the owner.',
+			'Merging with --admin or --auto skips the shipping policy. Use `gh pr merge --squash --delete-branch` or hand it to the owner.',
 	},
 	{
 		// Checked before the policy runs, so a missing flag is a cheap refusal.
 		// `-d` may be bundled (`-sd`); `--delete-branch=false` does not count.
+		// Known gap: a `-d` inside a quoted --body/--subject value also counts.
 		regex:
 			/\bgh\s+pr\s+merge\b(?![^|;&]*\s(?:--delete-branch(?:=true)?|-[a-zA-Z]*d[a-zA-Z]*)(?![\w=-]))/,
 		reason: 'Merge with --delete-branch so the branch does not outlive the PR.',

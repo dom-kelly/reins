@@ -17,10 +17,13 @@ type Item = {
  *  repo's origin. The merged-branch workflow deletes it either way, so this
  *  only informs; with no gh, no GitHub origin or no access there is no line. */
 function autoDeleteItem(root: string): Item | undefined {
+	// gh would read GH_REPO before the cwd's origin; this is about this repo.
+	const env = { ...process.env }
+	delete env.GH_REPO
 	const result = spawnSync(
 		'gh',
 		['api', 'repos/{owner}/{repo}', '-q', '.delete_branch_on_merge'],
-		{ cwd: root, encoding: 'utf8', timeout: 10_000 },
+		{ cwd: root, env, encoding: 'utf8', timeout: 10_000 },
 	)
 	if (result.status !== 0) return undefined
 	const on = result.stdout.trim() === 'true'

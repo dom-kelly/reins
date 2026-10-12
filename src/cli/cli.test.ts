@@ -226,7 +226,8 @@ test('every template is in the manifest exactly once, and every entry exists', a
 		.map((entry) =>
 			path.relative(templates, path.join(entry.parentPath, entry.name)),
 		)
-		.filter((rel) => rel !== 'manifest.json')
+		// Finder leaves .DS_Store behind; it is gitignored, not a template.
+		.filter((rel) => rel !== 'manifest.json' && !rel.endsWith('.DS_Store'))
 		.toSorted()
 	const { managed, owned } = loadManifest()
 	const listed = [...managed, ...owned]
