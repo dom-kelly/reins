@@ -5,50 +5,62 @@ import path from 'node:path'
 import { nodeVersionIssue } from '../checks/node-version.ts'
 import { readConfig, type HarnessConfig } from '../lib/config.ts'
 
-/** The environment an npm script run by a hook gets. Two things the hook's
- *  own process inherits must not reach it:
- *  - Git exports GIT_DIR (absolute in a worktree) to its hooks. A script that
- *    then runs git in another directory, as a test fixture does, would act on
- *    the developer's repo instead; without it git finds the repo from its cwd.
- *  - npm exports its config to whatever it runs, so `npx reins hook …` arrives
- *    with npm_config_prefix set to the prefix of the Node that ran npx. nvm
- *    refuses `nvm use` when that prefix is outside NVM_DIR (a Homebrew Node,
- *    say), which is exactly the Node the switch in runNpmScript exists to get
- *    away from. */
-function hookEnv(env = process.env) {
+/** Git exports GIT_DIR (absolute in a worktree) to its hooks. A script that
+ *  then runs git in another directory, as a test fixture does, would act on
+ *  the developer's repo instead; drop the variables so git finds the repo from
+ *  its cwd. */
+function withoutGitEnv(env = process.env) {
 	const clean = { ...env }
 	for (const key of [
 		'GIT_DIR',
 		'GIT_WORK_TREE',
 		'GIT_INDEX_FILE',
 		'GIT_PREFIX',
-		'npm_config_prefix',
-		'NPM_CONFIG_PREFIX',
-		'PREFIX',
 	])
 		delete clean[key]
 	return clean
 }
 
+/** npm exports its config to whatever it runs, so `npx reins hook …` arrives
+ *  with npm_config_prefix set to the prefix of the Node that ran npx. nvm
+ *  refuses `nvm use` when that prefix is outside NVM_DIR (a Homebrew Node,
+ *  say), which is exactly the Node the switch in runNpmScript exists to get
+ *  away from. Dropped for the nvm call only; a product script may read them. */
+function withoutNpmPrefix(env: NodeJS.ProcessEnv) {
+	const clean = { ...env }
+	for (const key of ['npm_config_prefix', 'NPM_CONFIG_PREFIX', 'PREFIX'])
+		delete clean[key]
+	return clean
+}
+
+const nodeFix =
+	'The hooks run on the Node Claude Code was started with: start it from a shell where `node -v` matches .nvmrc, or install that Node in nvm.'
+
 /** Runs an npm script on the Node in .nvmrc. Hooks inherit the shell's
  *  default Node, which may not be the one the project's native bindings were
  *  built for: when the Node this process runs on (the one npm would hand the
  *  script) already matches .nvmrc it is used as is; otherwise nvm selects the
- *  right one. When neither gives that Node the script does not run and the
- *  output says why: running it on the wrong Node fails later with a misleading
- *  error (a missing native binding) or, worse, passes. `nodeVersion` is a
- *  parameter for the tests. Returns { status, output }. */
+ *  right one. When neither gives that Node the script does not run (`ran`
+ *  false, status 2) and the output says why: running it on the wrong Node
+ *  fails later with a misleading error (a missing native binding) or, worse,
+ *  passes. `nodeVersion` is a parameter for the tests. */
 export function runNpmScript(
 	root: string,
 	script: string,
 	nodeVersion = process.versions.node,
 ) {
-	const options = { cwd: root, encoding: 'utf8', env: hookEnv() } as const
+	const options = { cwd: root, encoding: 'utf8', env: withoutGitEnv() } as const
 	const nvmrc = path.join(root, '.nvmrc')
 	const issue = existsSync(nvmrc)
-		? nodeVersionIssue(nodeVersion, readFileSync(nvmrc, 'utf8'))
+		? nodeVersionIssue(
+				nodeVersion,
+				readFileSync(nvmrc, 'utf8'),
+				undefined,
+				nodeFix,
+			)
 		: undefined
 	const refused = (why: string) => ({
+		ran: false,
 		status: 2,
 		output: `npm run ${script} did not run: ${why}\n`,
 	})
@@ -58,16 +70,19 @@ export function runNpmScript(
 			'nvm.sh',
 		)
 		if (!existsSync(nvm)) return refused(issue)
-		// nvm's errors go to stderr, its messages to stdout: on success the
-		// output is the PATH it built, on failure its reason.
+		// Prints the PATH nvm built, or nvm's reason when it could not: the
+		// two never mix, whatever nvm writes to which stream.
 		const selected = spawnSync(
 			'bash',
 			[
 				'-c',
-				`. "$0" >/dev/null 2>&1; nvm use 2>&1 >/dev/null && printf '%s' "$PATH"`,
+				[
+					`. "$0" >/dev/null 2>&1`,
+					`if why=$(nvm use 2>&1 >/dev/null); then printf '%s' "$PATH"; else printf '%s' "$why"; exit 1; fi`,
+				].join('\n'),
 				nvm,
 			],
-			options,
+			{ ...options, env: withoutNpmPrefix(options.env) },
 		)
 		if (selected.status !== 0)
 			return refused(
@@ -77,6 +92,7 @@ export function runNpmScript(
 	}
 	const result = spawnSync('npm', ['run', '-s', script], options)
 	return {
+		ran: true,
 		status: result.status ?? 1,
 		output: `${result.stdout ?? ''}${result.stderr ?? ''}`,
 	}
@@ -204,9 +220,13 @@ export function runTypecheckHook(
 		)
 		return 0
 	}
-	const { status, output } = runNpmScript(root, script)
+	const { ran, status, output } = runNpmScript(root, script)
 	if (status === 0) return 0
-	console.error(`Typecheck failed after editing ${file}:\n${tail(output)}`)
+	console.error(
+		ran
+			? `Typecheck failed after editing ${file}:\n${tail(output)}`
+			: output.trim(),
+	)
 	return 2
 }
 
@@ -244,10 +264,12 @@ export function runGateOnStopHook(
 		)
 		return 0
 	}
-	const { status, output } = runNpmScript(root, gate)
+	const { ran, status, output } = runNpmScript(root, gate)
 	if (status === 0) return 0
 	console.error(
-		`npm run ${gate} failed. Fix it before finishing, or tell the user why you cannot:\n${tail(output)}`,
+		ran
+			? `npm run ${gate} failed. Fix it before finishing, or tell the user why you cannot:\n${tail(output)}`
+			: `${output.trim()} Tell the user; it cannot be fixed from inside the session.`,
 	)
 	return 2
 }

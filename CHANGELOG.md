@@ -16,10 +16,13 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
   that already matches `.nvmrc` (CI, where nvm is present but Node comes from
   setup-node), otherwise drops the npm prefix variables and lets nvm select the
   right one, and when neither gives that Node it exits 2 saying which Node is
-  required and why nvm could not supply it, instead of running the script on the
-  wrong Node. A unit test drives the switch with a `node` shim and a prefix
-  outside nvm; the tarball e2e lane runs the typecheck hook command as Claude
-  Code does with such a prefix.
+  required, that the hooks run on the Node Claude Code was started with, and why
+  nvm could not supply it, instead of running the script on the wrong Node. An
+  `.nvmrc` that is not a version (`lts/*`) claims nothing, so the hook's Node is
+  used as is. The npm prefix variables are dropped for the nvm call only; a
+  product script still sees them. A unit test drives the switch with a `node`
+  shim and a prefix outside nvm; the tarball e2e lane runs the typecheck hook
+  command as Claude Code does with such a prefix.
 - The product harness-engineering doc routes a papercut owned by the harness to
   a `friction` issue on dom-kelly/reins instead of a workaround in the product.
 

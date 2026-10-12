@@ -35,7 +35,7 @@ test('an npm script run by a hook does not inherit GIT_DIR', async () => {
 	}
 })
 
-const nvmDir = process.env.NVM_DIR ?? path.join(homedir(), '.nvm')
+const nvmDir = path.resolve(process.env.NVM_DIR ?? path.join(homedir(), '.nvm'))
 const nvmInstalled = existsSync(path.join(nvmDir, 'nvm.sh'))
 const major = process.versions.node.split('.')[0]!
 /** Whether nvm can select this test's own major (CI gets Node from
@@ -86,6 +86,13 @@ test('a hook runs the Node in .nvmrc, switching with nvm only when its own Node 
 		await mkdir(prefix)
 		await writeFile(path.join(shim, 'node'), '#!/bin/sh\necho shim\n')
 		await chmod(path.join(shim, 'node'), 0o755)
+		// npm resolves from the same PATH, which may hold no other npm (a
+		// machine with Node from nvm only): this test's own, whose `env node`
+		// shebang still lands on the shim.
+		await symlink(
+			path.join(path.dirname(process.execPath), 'npm'),
+			path.join(shim, 'npm'),
+		)
 		await writeFile(
 			path.join(root, 'package.json'),
 			JSON.stringify({ scripts: { show: 'node -p process.version' } }),
@@ -101,7 +108,8 @@ test('a hook runs the Node in .nvmrc, switching with nvm only when its own Node 
 				PATH: [shim, ...pathWithoutNvm].join(path.delimiter),
 			},
 			async () => {
-				// No .nvmrc: nothing to match, the hook's Node (the shim) runs.
+				// No .nvmrc: nothing to match, the hook's Node (the shim) runs
+				// (npm's own shebang resolves to it, so "shim" is npm's output).
 				let run = runNpmScript(root, 'show')
 				expect(run.status, run.output).toBe(0)
 				expect(run.output).toContain('shim')
@@ -119,21 +127,31 @@ test('a hook runs the Node in .nvmrc, switching with nvm only when its own Node 
 				run = runNpmScript(root, 'show', '1.0.0')
 				if (nvmHasMajor) {
 					expect(run.status, run.output).toBe(0)
+					expect(run.ran).toBe(true)
 					expect(run.output).toContain(`v${major}.`)
 				} else {
 					expect(run.status, run.output).toBe(2)
+					expect(run.ran).toBe(false)
 					expect(run.output).toMatch(
-						/^npm run show did not run: node \d+ .* have 1\.0\.0\./,
+						/^npm run show did not run: node \d+ .* have 1\.0\.0\. The hooks run on the Node Claude Code was started with/,
 					)
 					if (nvmInstalled)
 						expect(run.output).toContain('nvm could not select it')
 				}
 				expect(run.output).not.toContain('shim')
 
+				// An .nvmrc only nvm can read (an alias): no version is claimed, so
+				// the hook's Node is used as is rather than refused with NaN.
+				await writeFile(path.join(root, '.nvmrc'), 'lts/*\n')
+				run = runNpmScript(root, 'show', '1.0.0')
+				expect(run.status, run.output).toBe(0)
+				expect(run.output).toContain('shim')
+
 				// A Node nothing can supply: the script does not run on the shim.
 				await writeFile(path.join(root, '.nvmrc'), '999\n')
 				run = runNpmScript(root, 'show', '1.0.0')
 				expect(run.status, run.output).toBe(2)
+				expect(run.ran).toBe(false)
 				expect(run.output).toMatch(
 					/^npm run show did not run: node 999 .* have 1\.0\.0\./,
 				)
