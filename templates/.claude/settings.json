@@ -6,7 +6,7 @@
 			"Bash(npm run lint)",
 			"Bash(npm run typecheck)",
 			"Bash(npm run test)",
-			"Bash(npx harness *)",
+			"Bash(npx reins *)",
 			"Bash(npx vitest run *)",
 			"Bash(git diff *)",
 			"Bash(git status)",
@@ -23,7 +23,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "npx --no-install harness hook guard-bash || { [ $? -eq 2 ] || echo 'the harness guard did not run (is @dom-kelly/harness installed? ask the user to run npm install)' >&2; exit 2; }",
+						"command": "npx --no-install reins hook guard-bash || { [ $? -eq 2 ] || echo 'the harness guard did not run (is @dom-kelly/reins installed? ask the user to run npm install)' >&2; exit 2; }",
 						"onFailure": "block"
 					}
 				]
@@ -35,7 +35,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "npx --no-install harness hook typecheck || { [ $? -eq 2 ] || echo 'the harness typecheck hook did not run (is @dom-kelly/harness installed? ask the user to run npm install)' >&2; exit 2; }",
+						"command": "npx --no-install reins hook typecheck || { [ $? -eq 2 ] || echo 'the harness typecheck hook did not run (is @dom-kelly/reins installed? ask the user to run npm install)' >&2; exit 2; }",
 						"onFailure": "block"
 					}
 				]
@@ -46,7 +46,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "npx --no-install harness hook validate-on-stop || { [ $? -eq 2 ] && exit 2; echo 'the harness validate-on-stop hook did not run (is @dom-kelly/harness installed? ask the user to run npm install)' >&2; exit 1; }",
+						"command": "npx --no-install reins hook validate-on-stop || { [ $? -eq 2 ] && exit 2; echo 'the harness validate-on-stop hook did not run (is @dom-kelly/reins installed? ask the user to run npm install)' >&2; exit 1; }",
 						"timeout": 300
 					}
 				]

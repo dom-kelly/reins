@@ -4,6 +4,7 @@ import {
 	mkdtemp,
 	readdir,
 	readFile,
+	rename,
 	rm,
 	writeFile,
 } from 'node:fs/promises'
@@ -12,12 +13,19 @@ import path from 'node:path'
 import { expect, test } from 'vitest'
 import { checkDocLinks } from '../checks/doc-links.ts'
 import { runChecks } from '../checks/run.ts'
-import { readConfig } from '../lib/config.ts'
+import {
+	configFile,
+	legacyConfigFile,
+	readConfig,
+	writeConfig,
+} from '../lib/config.ts'
 import { packageRoot } from '../lib/repo.ts'
 import {
 	applyTemplates,
 	baseDir,
+	legacyBaseDir,
 	mergeThreeWay,
+	migratePackageJson,
 	syncTemplates,
 } from '../lib/templates.ts'
 import { adoptRepo, patchPackageJson } from './adopt.ts'
@@ -29,7 +37,7 @@ async function tmp(prefix: string) {
 	return mkdtemp(path.join(tmpdir(), `harness-${prefix}-`))
 }
 
-test('new: a product has every template, harness.json, and passes the checks', async () => {
+test('new: a product has every template, reins.json, and passes the checks', async () => {
 	const dir = await tmp('new')
 	try {
 		const { root, report } = createProduct(path.join(dir, 'my-product'), {
@@ -71,9 +79,9 @@ test('adopt keeps existing files and only adds to package.json', async () => {
 			await readFile(path.join(root, 'package.json'), 'utf8'),
 		)
 		expect(pkg.scripts.test).toBe('vitest run')
-		expect(pkg.scripts.harness).toBe('harness')
-		expect(pkg.devDependencies['@dom-kelly/harness']).toBe(
-			'git+https://github.com/dom-kelly/harness.git',
+		expect(pkg.scripts.reins).toBe('reins')
+		expect(pkg.devDependencies['@dom-kelly/reins']).toBe(
+			'git+https://github.com/dom-kelly/reins.git',
 		)
 		expect(patchPackageJson(JSON.stringify(pkg)).added).toEqual([])
 	} finally {
@@ -203,7 +211,7 @@ async function hooksByEvent(file: string) {
 }
 
 // Claude Code reads hook exit 1 as "not blocking", so a hook that cannot start
-// would silently switch the guard off; and a bare `npx harness` falls back to
+// would silently switch the guard off; and a bare `npx reins` falls back to
 // the public registry, where an unrelated `harness` package exists. The Stop
 // hook is the exception: exit 2 there sends the agent back to a repair it
 // cannot make (the guard blocks `npm install` too), so it only warns.
@@ -212,7 +220,7 @@ test('Claude hook commands fail closed when the harness is not installed', async
 	const warns =
 		/ \|\| \{ \[ \$\? -eq 2 \] && exit 2; echo '[^']+' >&2; exit 1; \}$/
 	for (const [file, start] of [
-		['templates/.claude/settings.json', 'npx --no-install harness hook '],
+		['templates/.claude/settings.json', 'npx --no-install reins hook '],
 		['.claude/settings.json', 'node '],
 	] as const) {
 		const hooks = await hooksByEvent(path.join(packageRoot, file))
@@ -240,10 +248,10 @@ test('Claude hook commands fail closed when the harness is not installed', async
 test('doctor reports whether the harness is installed in the repo itself', async () => {
 	const root = await tmp('doctor')
 	try {
-		const label = "harness installed in this repo's node_modules"
+		const label = "reins installed in this repo's node_modules"
 		const before = doctor(root).find((i) => i.label === label)
 		expect(before).toMatchObject({ ok: false, fix: 'npm install' })
-		const installed = path.join(root, 'node_modules/@dom-kelly/harness')
+		const installed = path.join(root, 'node_modules/@dom-kelly/reins')
 		await mkdir(installed, { recursive: true })
 		await writeFile(path.join(installed, 'package.json'), '{}')
 		expect(doctor(root).find((i) => i.label === label)?.ok).toBe(true)
@@ -324,4 +332,162 @@ test('doc link check can ignore mirrored paths', async () => {
 	} finally {
 		await rm(root, { recursive: true, force: true })
 	}
+})
+
+/** A product as the harness left it before decision 0006: `harness.json` and
+ *  `.harness/base`, with a local edit to one managed file. */
+async function legacyProduct(dir: string, templates: string) {
+	const root = path.join(dir, 'repo')
+	await mkdir(root)
+	await fakeTemplates(templates, {
+		'managed/a.md': 'a1\n',
+		'managed/b.md': 'one\ntwo\nthree\n',
+	})
+	const vars = { name: 'old' }
+	applyTemplates(root, vars, { overwrite: true, templatesDir: templates })
+	writeConfig(root, {
+		harness: '0.0.1',
+		product: vars,
+		policy: { authority: { high: 'owner' } },
+	})
+	await writeFile(path.join(root, 'managed/b.md'), 'one\ntwo\nthree\nmine\n')
+	await writeFile(path.join(root, 'package.json'), legacyPackageJson)
+	await rename(path.join(root, configFile), path.join(root, legacyConfigFile))
+	await mkdir(path.join(root, path.dirname(legacyBaseDir)), { recursive: true })
+	await rename(path.join(root, baseDir), path.join(root, legacyBaseDir))
+	await rm(path.join(root, path.dirname(baseDir)), { recursive: true })
+	return { root, vars }
+}
+
+const legacyPackageJson = `${JSON.stringify(
+	{
+		name: 'old',
+		scripts: {
+			test: 'vitest run',
+			harness: 'harness',
+			'harness:check': 'harness check',
+			validate: 'concurrently "npm:test" "npx harness check"',
+		},
+		devDependencies: {
+			'@dom-kelly/harness': 'git+https://github.com/dom-kelly/harness.git',
+			prettier: '^3.6.0',
+		},
+	},
+	null,
+	'\t',
+)}\n`
+
+const renamedAll = [
+	`${legacyConfigFile} → ${configFile}`,
+	`${legacyBaseDir} → ${baseDir}`,
+	'package.json → @dom-kelly/reins and npx reins (run npm install)',
+]
+
+/** Old names gone, config and base copies intact, package.json pointed at
+ *  reins (adopt also adds its own scripts and dependencies, so match, not equal). */
+async function expectMigrated(root: string, baseA: string) {
+	expect(existsSync(path.join(root, legacyConfigFile))).toBe(false)
+	expect(existsSync(path.join(root, path.dirname(legacyBaseDir)))).toBe(false)
+	expect(readConfig(root)?.policy).toEqual({ authority: { high: 'owner' } })
+	expect(await readFile(path.join(root, baseDir, 'managed/a.md'), 'utf8')).toBe(
+		baseA,
+	)
+	const pkg = JSON.parse(
+		await readFile(path.join(root, 'package.json'), 'utf8'),
+	)
+	expect(pkg.scripts).toMatchObject({
+		test: 'vitest run',
+		reins: 'reins',
+		'reins:check': 'reins check',
+		validate: 'concurrently "npm:test" "npx reins check"',
+	})
+	expect(pkg.devDependencies).toMatchObject({
+		'@dom-kelly/reins': 'git+https://github.com/dom-kelly/reins.git',
+		prettier: '^3.6.0',
+	})
+	expect(JSON.stringify(pkg)).not.toContain('harness')
+}
+
+test('adopt renames harness.json and .harness/base to the reins names, losing nothing', async () => {
+	const dir = await tmp('migrate-adopt')
+	try {
+		const { root } = await legacyProduct(dir, path.join(dir, 'templates'))
+		const result = adoptRepo(root)
+		expect(result.renamed).toEqual(renamedAll)
+		await expectMigrated(root, 'a1\n')
+		expect(readConfig(root)?.product.name).toBe('old')
+		expect(await readFile(path.join(root, 'managed/b.md'), 'utf8')).toBe(
+			'one\ntwo\nthree\nmine\n',
+		)
+		expect(adoptRepo(root).renamed).toEqual([])
+		// A stale old file next to the new one is reported, never overwritten.
+		await writeFile(path.join(root, legacyConfigFile), '{"stale":1}\n')
+		expect(adoptRepo(root).renamed).toEqual([
+			`${legacyConfigFile} left in place (${configFile} exists; delete the old one)`,
+		])
+		expect(readConfig(root)?.product.name).toBe('old')
+	} finally {
+		await rm(dir, { recursive: true, force: true })
+	}
+})
+
+test('sync migrates the old names and merges from the moved base; --check only reads them', async () => {
+	const dir = await tmp('migrate-sync')
+	const templates = path.join(dir, 'templates')
+	try {
+		const { root, vars } = await legacyProduct(dir, templates)
+		await fakeTemplates(templates, {
+			'managed/a.md': 'a2\n',
+			'managed/b.md': 'zero\none\ntwo\nthree\n',
+		})
+
+		const dry = await syncTemplates(root, vars, {
+			check: true,
+			templatesDir: templates,
+		})
+		expect(dry).toMatchObject({
+			renamed: [],
+			missingBase: [],
+			updated: ['managed/a.md'],
+			merged: ['managed/b.md'],
+		})
+		expect(existsSync(path.join(root, legacyConfigFile))).toBe(true)
+		expect(existsSync(path.join(root, legacyBaseDir))).toBe(true)
+		expect(existsSync(path.join(root, path.dirname(baseDir)))).toBe(false)
+		expect(readConfig(root)?.product.name).toBe('old')
+		expect(await readFile(path.join(root, 'package.json'), 'utf8')).toBe(
+			legacyPackageJson,
+		)
+
+		const report = await syncTemplates(root, vars, { templatesDir: templates })
+		expect(report).toMatchObject({
+			renamed: renamedAll,
+			missingBase: [],
+			updated: ['managed/a.md'],
+			merged: ['managed/b.md'],
+			conflicts: [],
+		})
+		await expectMigrated(root, 'a2\n')
+		expect(await readFile(path.join(root, 'managed/b.md'), 'utf8')).toBe(
+			'zero\none\ntwo\nthree\nmine\n',
+		)
+		expect(
+			await readFile(path.join(root, baseDir, 'managed/a.md'), 'utf8'),
+		).toBe('a2\n')
+	} finally {
+		await rm(dir, { recursive: true, force: true })
+	}
+})
+
+test('package.json migration touches only what named the old package', () => {
+	expect(migratePackageJson('{\n  "name": "x",\n  "scripts": {}\n}\n')).toBe(
+		undefined,
+	)
+	expect(
+		migratePackageJson(
+			'{\n  "scripts": { "harness": "harness", "reins": "reins" },\n  "devDependencies": { "@dom-kelly/reins": "file:x", "@dom-kelly/harness": "y" }\n}\n',
+		),
+	).toBe(
+		'{\n  "scripts": {\n    "reins": "reins"\n  },\n  "devDependencies": {\n    "@dom-kelly/reins": "file:x"\n  }\n}\n',
+	)
 })

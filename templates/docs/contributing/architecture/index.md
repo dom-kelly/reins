@@ -9,8 +9,8 @@ as the product grows.
 building blocks. It is **not** a feature changelog.
 
 - Every source file under `src/` must be owned by exactly one primitive's `code`
-  root (longest prefix wins). `npx harness check` enforces it.
-- Classify a diff against it with `npx harness classify`; `ship-pr` uses this to
+  root (longest prefix wins). `npx reins check` enforces it.
+- Classify a diff against it with `npx reins classify`; `ship-pr` uses this to
   assess risk.
 - Update the map only when a change **adds, removes, or reshapes** a primitive.
   Behavior detail goes in the linked `docs`, not in `summary`.

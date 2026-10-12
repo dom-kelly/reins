@@ -6,7 +6,7 @@
 			"Bash(npm run lint)",
 			"Bash(npm run typecheck)",
 			"Bash(npm run test)",
-			"Bash(node bin/harness.ts *)",
+			"Bash(node bin/reins.ts *)",
 			"Bash(npx vitest run *)",
 			"Bash(git diff *)",
 			"Bash(git status)",
@@ -22,7 +22,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/bin/harness.ts\" hook guard-bash || { [ $? -eq 2 ] || echo 'the harness guard did not run (wrong Node or missing node_modules? run nvm use && npm install)' >&2; exit 2; }",
+						"command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/bin/reins.ts\" hook guard-bash || { [ $? -eq 2 ] || echo 'the harness guard did not run (wrong Node or missing node_modules? run nvm use && npm install)' >&2; exit 2; }",
 						"onFailure": "block"
 					}
 				]
@@ -34,7 +34,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/bin/harness.ts\" hook typecheck || { [ $? -eq 2 ] || echo 'the harness typecheck hook did not run (wrong Node or missing node_modules? run nvm use && npm install)' >&2; exit 2; }",
+						"command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/bin/reins.ts\" hook typecheck || { [ $? -eq 2 ] || echo 'the harness typecheck hook did not run (wrong Node or missing node_modules? run nvm use && npm install)' >&2; exit 2; }",
 						"onFailure": "block"
 					}
 				]
@@ -45,7 +45,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/bin/harness.ts\" hook validate-on-stop || { [ $? -eq 2 ] && exit 2; echo 'the harness validate-on-stop hook did not run (wrong Node or missing node_modules? run nvm use && npm install)' >&2; exit 1; }",
+						"command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/bin/reins.ts\" hook validate-on-stop || { [ $? -eq 2 ] && exit 2; echo 'the harness validate-on-stop hook did not run (wrong Node or missing node_modules? run nvm use && npm install)' >&2; exit 1; }",
 						"timeout": 300
 					}
 				]

@@ -12,11 +12,11 @@ export const packageRoot = (() => {
 		const file = path.join(dir, 'package.json')
 		if (existsSync(file)) {
 			const pkg = JSON.parse(readFileSync(file, 'utf8')) as { name?: string }
-			if (pkg.name === '@dom-kelly/harness') return dir
+			if (pkg.name === '@dom-kelly/reins') return dir
 		}
 		dir = path.dirname(dir)
 	}
-	throw new Error('harness: cannot find the package root')
+	throw new Error('reins: cannot find the package root')
 })()
 
 /** The repo the CLI acts on: the git toplevel of `from`, else `from` itself. */
@@ -38,6 +38,7 @@ const skippedDirs = new Set([
 	'.tmp',
 	'coverage',
 	'.harness',
+	'.reins',
 ])
 
 /** Lists files under `relativeDir` (posix paths relative to `root`), following

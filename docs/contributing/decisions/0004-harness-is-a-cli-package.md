@@ -12,12 +12,12 @@ one repo; with several products that is not an option.
 
 ## Decision
 
-This repo is an npm package with a CLI. `harness new` scaffolds a product and
-`harness adopt` applies the harness to an existing repo; both record what they
-wrote in `.harness/base/`. `harness sync` brings managed files up to the current
+This repo is an npm package with a CLI. `reins new` scaffolds a product and
+`reins adopt` applies the harness to an existing repo; both record what they
+wrote in `.reins/base/`. `reins sync` brings managed files up to the current
 templates with a three-way merge, so local edits survive. The engine (checkers,
 classifier, hooks, later the merge policy) is never copied into a product;
-products call `npx harness …`.
+products call `npx reins …`.
 
 Files fall into three kinds, listed in `templates/manifest.json`:
 
@@ -36,8 +36,8 @@ are different documents, and are not generated from each other.
 ## Consequences
 
 Improving the harness means editing `templates/` or `src/` here and running
-`npx harness sync` in each product. The repo is public (it holds no secrets), so
-a product's CI installs it with no token; npm's SSH lockfile URLs are rewritten
-to HTTPS in the validate template. Revisit if the three-way merge produces
+`npx reins sync` in each product. The repo is public (it holds no secrets), so a
+product's CI installs it with no token; npm's SSH lockfile URLs are rewritten to
+HTTPS in the validate template. Revisit if the three-way merge produces
 conflicts on most syncs, which would mean managed files carry too much
 product-specific text.

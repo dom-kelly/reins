@@ -11,15 +11,15 @@ description: >
 
 Authority comes from
 [shipping-policy.md](../../../docs/contributing/shipping-policy.md) and is
-enforced by `npx harness policy`. Never work around it. When the policy parks a
-PR for the owner, stop with everything ready, say which rule applied, and link
-the PR.
+enforced by `npx reins policy`. Never work around it. When the policy parks a PR
+for the owner, stop with everything ready, say which rule applied, and link the
+PR.
 
 ## Loop
 
-1. **Assess risk.** `npx harness classify` for the primitives touched, then
-   judge `composes` · `extends` · `adds` from the diff. Invariants touched → at
-   least medium.
+1. **Assess risk.** `npx reins classify` for the primitives touched, then judge
+   `composes` · `extends` · `adds` from the diff. Invariants touched → at least
+   medium.
 2. **Validate.** `npm run validate`. Fix failures. Do not weaken a check to
    pass; if a check is wrong, fix the checker with a test.
 3. **Draft first.** If pushing is allowed, open the PR as a draft while
@@ -38,10 +38,10 @@ the PR.
 8. **Ship within policy.** Wait on CI for the current head SHA only; ignore
    results for superseded commits. Then
    `gh pr merge <n> --squash --delete-branch`: the guard runs
-   `npx harness policy <n>` and either merges or prints what it is waiting for
-   (a reviewer, an unanswered finding, or the owner). Act on that; never retry
-   with other flags or the API. If the branch becomes conflicting after green,
-   rebase once and re-run; if still conflicting, stop and report.
+   `npx reins policy <n>` and either merges or prints what it is waiting for (a
+   reviewer, an unanswered finding, or the owner). Act on that; never retry with
+   other flags or the API. If the branch becomes conflicting after green, rebase
+   once and re-run; if still conflicting, stop and report.
 9. **After merge/deploy (if allowed):** confirm `/health` reports the merge sha
    on the deployed origin.
 

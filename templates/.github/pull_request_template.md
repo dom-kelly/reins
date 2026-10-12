@@ -22,7 +22,7 @@
 
 ## Primitives
 
-<!-- Paste `npx harness classify` and say how each listed invariant still holds. -->
+<!-- Paste `npx reins classify` and say how each listed invariant still holds. -->
 
 ## Testing
 

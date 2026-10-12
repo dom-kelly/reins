@@ -61,7 +61,6 @@ export function checkRepoRules(
 	return {
 		name: 'repo rules',
 		issues,
-		remediation:
-			'See harness.json → checks for the rules this repo has chosen.',
+		remediation: 'See reins.json → checks for the rules this repo has chosen.',
 	}
 }

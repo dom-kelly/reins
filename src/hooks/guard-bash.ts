@@ -80,7 +80,7 @@ export function guardDecision(
 		try {
 			extra.push({ regex: new RegExp(pattern), reason })
 		} catch (error) {
-			return `harness.json guard.blocked has an invalid pattern ${JSON.stringify(pattern)}: ${error instanceof Error ? error.message : String(error)}. Fix it before running commands.`
+			return `reins.json guard.blocked has an invalid pattern ${JSON.stringify(pattern)}: ${error instanceof Error ? error.message : String(error)}. Fix it before running commands.`
 		}
 	}
 	const blocked = findBlockedReason(command, extra)

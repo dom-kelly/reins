@@ -15,8 +15,8 @@ import { applyTemplates, render } from '../lib/templates.ts'
 
 export const scaffoldDir = path.join(packageRoot, 'scaffold', 'app-node')
 
-/** harness new <dir>: a product repo with the placeholder app, every template,
- *  harness.json, git initialised and dependencies installed. */
+/** reins new <dir>: a product repo with the placeholder app, every template,
+ *  reins.json, git initialised and dependencies installed. */
 export function createProduct(
 	dir: string,
 	{ name = path.basename(path.resolve(dir)), install = true, git = true } = {},

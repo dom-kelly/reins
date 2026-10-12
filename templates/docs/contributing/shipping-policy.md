@@ -1,8 +1,8 @@
 # Shipping policy
 
 Merging to `main` is the moment a change reaches everyone (and, in a deployed
-product, production). The owner sets this policy in `harness.json` → `policy`;
-`npx harness policy <pr>` applies it and the guard hook runs it on every
+product, production). The owner sets this policy in `reins.json` → `policy`;
+`npx reins policy <pr>` applies it and the guard hook runs it on every
 `gh pr merge`, so an agent cannot merge past it. Agents never widen it on their
 own.
 
@@ -14,7 +14,7 @@ Risk is the highest of three things:
    primitives) = low, `extends` (changes a primitive's behaviour or shape) =
    medium, `adds` (a new primitive) = high.
 2. **The floor** of every primitive the diff touches
-   ([primitives.yaml](./architecture/primitives.yaml); `npx harness classify`
+   ([primitives.yaml](./architecture/primitives.yaml); `npx reins classify`
    lists them). A renamed file counts under both its paths. An unmapped file is
    high.
 3. **The Door** — `one-way` is always high.
@@ -39,7 +39,7 @@ merging through the API are refused outright.
 
 ## Where the policy reads from
 
-`harness.json` and `primitives.yaml` are read from `origin/main`, never from the
+`reins.json` and `primitives.yaml` are read from `origin/main`, never from the
 PR's own checkout, so a PR cannot lower its floors or change who may merge it;
 such a change takes effect only after it is merged under the current rules.
 

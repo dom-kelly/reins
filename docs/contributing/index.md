@@ -1,7 +1,7 @@
 # Developing the harness
 
 This repo is the harness package: the CLI products call, the templates it writes
-into them, and the scaffold `harness new` starts from. For the principles every
+into them, and the scaffold `reins new` starts from. For the principles every
 product follows (and this repo follows too), read the product-facing docs in
 [templates/docs/contributing/](../../templates/docs/contributing/index.md).
 

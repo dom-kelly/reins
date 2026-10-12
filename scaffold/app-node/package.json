@@ -16,8 +16,8 @@
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"harness": "harness",
-		"validate": "concurrently -g -n format,lint,types,test,harness,audit \"npm:format:check\" \"npm:lint\" \"npm:typecheck\" \"npm:test\" \"npx harness check\" \"npm:audit:prod\"",
+		"reins": "reins",
+		"validate": "concurrently -g -n format,lint,types,test,reins,audit \"npm:format:check\" \"npm:lint\" \"npm:typecheck\" \"npm:test\" \"npx reins check\" \"npm:audit:prod\"",
 		"validate:fix": "npm run format && npm run lint:fix",
 		"prepare": "husky",
 		"audit:prod": "npm audit --omit=dev --audit-level=moderate"
@@ -30,7 +30,7 @@
 		"*": "prettier --write --ignore-unknown"
 	},
 	"devDependencies": {
-		"@dom-kelly/harness": "git+https://github.com/dom-kelly/harness.git",
+		"@dom-kelly/reins": "git+https://github.com/dom-kelly/reins.git",
 		"@types/node": "^22.18.0",
 		"concurrently": "^9.2.0",
 		"husky": "^9.1.7",

@@ -66,7 +66,7 @@ Rule of thumb: if a reviewer makes the same comment twice, encode it.
 | ---------------------- | -------------------------------------------------------------------------------------------- |
 | `format:check`, `lint` | Formatting and correctness lint                                                              |
 | `typecheck`, `test`    | Types and behavior                                                                           |
-| `npx harness check`    | Decision record numbers, broken doc links, skill frontmatter, the primitives map, repo rules |
+| `npx reins check`      | Decision record numbers, broken doc links, skill frontmatter, the primitives map, repo rules |
 | `audit:prod`           | Production dependency vulnerabilities (moderate and above)                                   |
 
 Add a product-specific checker as a script with a test, wired into `validate`;
@@ -78,7 +78,7 @@ place are in [growth.md](./growth.md).
 `.claude/settings.json` applies to every Claude Code session in this repo:
 
 - `git push` and `gh pr merge` always ask the owner.
-- A PreToolUse hook (`the harness guard hook (`npx harness hook guard-bash`)`)
+- A PreToolUse hook (`the harness guard hook (`npx reins hook guard-bash`)`)
   blocks force-pushes, `--no-verify`, `git reset --hard`, and `git clean -f`,
   with a message saying what to do instead.
 - The guard and typecheck hooks refuse to run (exit 2) when the harness is not

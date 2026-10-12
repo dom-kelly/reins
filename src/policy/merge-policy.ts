@@ -9,9 +9,14 @@ import {
 	type PrimitivesMap,
 	type Risk,
 } from '../checks/primitives.ts'
-import { configFile, type HarnessConfig } from '../lib/config.ts'
+import {
+	configFile,
+	legacyConfigFile,
+	readConfig,
+	type HarnessConfig,
+} from '../lib/config.ts'
 
-/** `harness.json` → `policy`. Mirrors kody's ship-pr tiers:
+/** `reins.json` → `policy`. Mirrors kody's ship-pr tiers:
  *    low    green CI
  *    medium + every gate reviewer's check passed and its findings addressed
  *    high   + every required reviewer has reviewed the current head
@@ -104,7 +109,8 @@ export function policySources(root: string): {
 	}
 	const mapSource = show(mapPath)
 	if (mapSource !== undefined) {
-		const configSource = show(configFile)
+		// A product that has not migrated still has `harness.json` on main.
+		const configSource = show(configFile) ?? show(legacyConfigFile)
 		return {
 			config: configSource
 				? (JSON.parse(configSource) as HarnessConfig)
@@ -115,11 +121,8 @@ export function policySources(root: string): {
 	}
 	const mapFile = path.join(root, mapPath)
 	if (!existsSync(mapFile)) throw new Error(`${mapPath} is missing`)
-	const configPath = path.join(root, configFile)
 	return {
-		config: existsSync(configPath)
-			? (JSON.parse(readFileSync(configPath, 'utf8')) as HarnessConfig)
-			: undefined,
+		config: readConfig(root),
 		map: parse(readFileSync(mapFile, 'utf8')) as PrimitivesMap,
 		from: 'working tree (no origin/main)',
 	}

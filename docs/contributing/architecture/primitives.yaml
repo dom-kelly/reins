@@ -18,7 +18,7 @@ unowned:
   - AGENTS.md
   - CLAUDE.md
   - SECURITY.md
-  - .harness/
+  - .reins/
 
 unowned_suffixes:
   - .test.ts
@@ -67,7 +67,7 @@ primitives:
     group: engine
     name: Merge policy
     summary:
-      Risk tiers, reviewer gates and per-repo authority behind `harness policy`.
+      Risk tiers, reviewer gates and per-repo authority behind `reins policy`.
     floor: high
     code:
       - src/policy
@@ -77,7 +77,7 @@ primitives:
   - id: templating
     group: engine
     name: Templates engine
-    summary: harness.json, manifest, render, apply and three-way sync.
+    summary: reins.json, manifest, render, apply and three-way sync.
     floor: high
     code:
       - src/lib

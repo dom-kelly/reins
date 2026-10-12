@@ -1,5 +1,5 @@
 {
-	"name": "@dom-kelly/harness",
+	"name": "@dom-kelly/reins",
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",
@@ -18,8 +18,8 @@
 		"validate:fix": "npm run format && npm run lint:fix",
 		"prepare": "node scripts/prepare.mjs",
 		"audit:prod": "npm audit --omit=dev --audit-level=moderate",
-		"harness": "node bin/harness.ts",
-		"check": "node bin/harness.ts check",
+		"reins": "node bin/reins.ts",
+		"check": "node bin/reins.ts check",
 		"build": "tsc -p tsconfig.build.json",
 		"test:e2e": "vitest run --config vitest.e2e.config.ts"
 	},
@@ -40,9 +40,9 @@
 		"typescript": "^5.9.0",
 		"vitest": "^3.2.0"
 	},
-	"description": "The agent harness as a CLI: scaffold, adopt, sync, check, classify, hooks.",
+	"description": "reins: the agent harness as a CLI. Scaffold, adopt, sync, check, classify, policy, hooks.",
 	"bin": {
-		"harness": "dist/bin/harness.js"
+		"reins": "dist/bin/reins.js"
 	},
 	"files": [
 		"dist",
@@ -51,7 +51,7 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/dom-kelly/harness.git"
+		"url": "git+https://github.com/dom-kelly/reins.git"
 	},
 	"dependencies": {
 		"yaml": "^2.8.0"

@@ -1,1 +1,1 @@
-npx harness hook pre-commit
+npx reins hook pre-commit

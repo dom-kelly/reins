@@ -19,7 +19,7 @@ const pushToMain = JSON.stringify({
 })
 
 /** The PreToolUse hook exactly as Claude Code runs it: `sh -c`, JSON on
- *  stdin. The npm prefix points at an empty dir so a globally linked `harness`
+ *  stdin. The npm prefix points at an empty dir so a globally linked `reins`
  *  on the developer's machine cannot stand in for the product's own. */
 function runGuard(command: string, cwd: string, emptyPrefix: string) {
 	return spawnSync('sh', ['-c', command], {
@@ -32,7 +32,7 @@ function runGuard(command: string, cwd: string, emptyPrefix: string) {
 
 // The harness uses itself: pack the package, create a product with the packed
 // CLI, install the tarball into the product, and run the product's own gate,
-// which calls `npx harness check` from node_modules. Unit tests run the source;
+// which calls `npx reins check` from node_modules. Unit tests run the source;
 // only this proves the package as installed.
 test('a product built from the packed package passes its own validate', async () => {
 	const dir = await mkdtemp(path.join(tmpdir(), 'harness-e2e-'))
@@ -40,9 +40,9 @@ test('a product built from the packed package passes its own validate', async ()
 		const pack = run('npm', ['pack', '--pack-destination', dir], packageRoot)
 		expect(pack.code, pack.out).toBe(0)
 		const tarball = (await readdir(dir)).find((f) => f.endsWith('.tgz'))!
-		expect(tarball).toBeDefined()
+		expect(tarball).toMatch(/^dom-kelly-reins-.*\.tgz$/)
 
-		const cli = path.join(packageRoot, 'dist/bin/harness.js')
+		const cli = path.join(packageRoot, 'dist/bin/reins.js')
 		expect(existsSync(cli), 'npm pack should have built dist/').toBe(true)
 		const product = path.join(dir, 'demo-product')
 		const created = run(
@@ -53,7 +53,7 @@ test('a product built from the packed package passes its own validate', async ()
 		expect(created.code, created.out).toBe(0)
 
 		// Before install, the hook command Claude Code would run must block
-		// (exit 2) and say why, not fail quietly or fetch `harness` from npm.
+		// (exit 2) and say why, not fail quietly or fetch `reins` from npm.
 		const settings = JSON.parse(
 			readFileSync(path.join(product, '.claude/settings.json'), 'utf8'),
 		) as { hooks: { PreToolUse: Array<{ hooks: Array<{ command: string }> }> } }
@@ -64,26 +64,25 @@ test('a product built from the packed package passes its own validate', async ()
 
 		const pkgFile = path.join(product, 'package.json')
 		const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'))
-		pkg.devDependencies['@dom-kelly/harness'] =
-			`file:${path.join(dir, tarball)}`
+		pkg.devDependencies['@dom-kelly/reins'] = `file:${path.join(dir, tarball)}`
 		writeFileSync(pkgFile, `${JSON.stringify(pkg, null, '\t')}\n`)
 
 		const install = run('npm', ['install', '--no-audit', '--no-fund'], product)
 		expect(install.code, install.out).toBe(0)
 
-		const helpText = run('npx', ['harness', '--help'], product)
+		const helpText = run('npx', ['reins', '--help'], product)
 		expect(helpText.code, helpText.out).toBe(0)
-		expect(helpText.out).toContain('harness sync')
+		expect(helpText.out).toContain('reins sync')
 
 		const format = run('npx', ['prettier', '--check', '.'], product)
 		expect(format.code, format.out).toBe(0)
 		const validate = run('npm', ['run', '-s', 'validate'], product)
 		expect(validate.code, validate.out).toBe(0)
 
-		const sync = run('npx', ['harness', 'sync', '--check'], product)
+		const sync = run('npx', ['reins', 'sync', '--check'], product)
 		expect(sync.code, sync.out).toBe(0)
 
-		const guard = spawnSync('npx', ['harness', 'hook', 'guard-bash'], {
+		const guard = spawnSync('npx', ['reins', 'hook', 'guard-bash'], {
 			cwd: product,
 			encoding: 'utf8',
 			input: pushToMain,

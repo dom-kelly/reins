@@ -26,16 +26,16 @@ import {
 	syncTemplates,
 } from '../src/lib/templates.ts'
 
-const help = `harness ${packageVersion} — the agent harness, as a CLI
+const help = `reins ${packageVersion} — the agent harness, as a CLI
 
-  harness new <dir> [--name x] [--no-install] [--no-git]   start a product
-  harness adopt [--name x]        apply the harness to this repo, keeping your files
-  harness sync [--check]          bring managed files up to date (three-way merge)
-  harness check [--docs]          decisions, links, skills, primitives map, repo rules
-  harness classify [--base ref | --stdin] [--json]   primitives a change touches
-  harness doctor                  what a fresh session needs to know
-  harness policy [pr|url|branch]  may an agent merge this PR? (risk tiers, reviewers, authority)
-  harness hook <guard-bash | typecheck | validate-on-stop | pre-commit | pre-push | node-version>
+  reins new <dir> [--name x] [--no-install] [--no-git]   start a product
+  reins adopt [--name x]        apply the harness to this repo, keeping your files
+  reins sync [--check]          bring managed files up to date (three-way merge)
+  reins check [--docs]          decisions, links, skills, primitives map, repo rules
+  reins classify [--base ref | --stdin] [--json]   primitives a change touches
+  reins doctor                  what a fresh session needs to know
+  reins policy [pr|url|branch]  may an agent merge this PR? (risk tiers, reviewers, authority)
+  reins hook <guard-bash | typecheck | validate-on-stop | pre-commit | pre-push | node-version>
 `
 
 async function main(): Promise<number> {
@@ -46,7 +46,7 @@ async function main(): Promise<number> {
 	switch (command) {
 		case 'new': {
 			const dir = positionals[0]
-			if (!dir) throw new Error('harness new <dir>')
+			if (!dir) throw new Error('reins new <dir>')
 			const { root: created, report } = createProduct(dir, {
 				name: options.get('--name'),
 				install: !flags.has('--no-install'),
@@ -66,7 +66,7 @@ async function main(): Promise<number> {
 		case 'sync': {
 			const config = readConfig(root)
 			if (!config)
-				throw new Error('no harness.json here; run `harness adopt` first')
+				throw new Error('no reins.json here; run `reins adopt` first')
 			const check = flags.has('--check')
 			const report = await syncTemplates(root, config.product, { check })
 			console.log(formatSyncReport(report, check))

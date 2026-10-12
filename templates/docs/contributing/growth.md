@@ -1,7 +1,7 @@
 # Growth path
 
 Pieces of a full kody-style harness that this template leaves out on purpose
-([decision 0003](https://github.com/dom-kelly/harness/blob/main/docs/contributing/decisions/0003-slim-template-grow-when-earned.md)).
+([decision 0003](https://github.com/dom-kelly/reins/blob/main/docs/contributing/decisions/0003-slim-template-grow-when-earned.md)).
 Each has a trigger. When the trigger fires, add the piece in a PR that names it;
 until then, do not add it because it looks useful.
 

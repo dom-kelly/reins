@@ -1,7 +1,7 @@
 # Agent index
 
 This repo is **the harness**: the CLI products call, the templates it writes
-into them, and the scaffold `harness new` starts from. It follows the same
+into them, and the scaffold `reins new` starts from. It follows the same
 principles it ships; read them in
 [templates/docs/contributing/harness-engineering.md](./templates/docs/contributing/harness-engineering.md).
 
@@ -23,4 +23,4 @@ checks, so green locally means green in CI.
 identical by a test): use `review-and-recommend` before a design choice,
 `ship-pr` to take a change to done, `verify-app` here means `npm run validate`
 plus trying the CLI against a temp product
-(`node bin/harness.ts new .tmp/demo --no-install`).
+(`node bin/reins.ts new .tmp/demo --no-install`).

@@ -5,27 +5,27 @@ Requires Node 22.18 or later (`nvm use` reads `.nvmrc`).
 ```bash
 npm install
 npm run validate          # the one gate: format, lint, types, tests, the CLI's own checks
-node bin/harness.ts --help
+node bin/reins.ts --help
 ```
 
 ## Layout
 
-| Path                 | What                                                                           |
-| -------------------- | ------------------------------------------------------------------------------ |
-| `bin/harness.ts`     | CLI entry: new, adopt, sync, check, classify, doctor, hook                     |
-| `src/checks/`        | Checkers behind `harness check` and the git hooks                              |
-| `src/hooks/`         | The Bash guard, the typecheck and gate-on-stop hooks, the git hook runner      |
-| `src/policy/`        | `harness policy`: risk tiers, reviewers, authority; tested against a stub `gh` |
-| `src/lib/`           | Repo discovery, `harness.json`, template apply and three-way sync              |
-| `src/cli/`           | new, adopt, doctor                                                             |
-| `templates/`         | Files written into products; `manifest.json` says which are managed vs owned   |
-| `scaffold/app-node/` | The placeholder app `harness new` starts from                                  |
-| `docs/contributing/` | These docs, about the harness itself                                           |
+| Path                 | What                                                                         |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `bin/reins.ts`       | CLI entry: new, adopt, sync, check, classify, doctor, hook                   |
+| `src/checks/`        | Checkers behind `reins check` and the git hooks                              |
+| `src/hooks/`         | The Bash guard, the typecheck and gate-on-stop hooks, the git hook runner    |
+| `src/policy/`        | `reins policy`: risk tiers, reviewers, authority; tested against a stub `gh` |
+| `src/lib/`           | Repo discovery, `reins.json`, template apply and three-way sync              |
+| `src/cli/`           | new, adopt, doctor                                                           |
+| `templates/`         | Files written into products; `manifest.json` says which are managed vs owned |
+| `scaffold/app-node/` | The placeholder app `reins new` starts from                                  |
+| `docs/contributing/` | These docs, about the harness itself                                         |
 
 The root `.claude/skills` holds copies of `templates/.claude/skills`: the
 harness uses the same skills it ships. A test fails if the copies drift, so edit
 the template and copy it over (a symlink breaks git stash and npm pack). Their
-links point at product docs, so `harness.json` lists them under
+links point at product docs, so `reins.json` lists them under
 `checks.ignoreLinksIn`.
 
 ## Changing a template
@@ -38,14 +38,14 @@ links point at product docs, so `harness.json` lists them under
 3. `npm run validate`. The CLI tests (`src/cli/cli.test.ts`) create a product in
    a temp dir and run every check against it, so a template that breaks a
    product fails here.
-4. In a product, `npx harness sync` (or `--check` in CI to see what is behind).
+4. In a product, `npx reins sync` (or `--check` in CI to see what is behind).
 
 ## Build output
 
 Node refuses to strip TypeScript types for files under `node_modules`, so the
 package ships compiled JavaScript: `npm install` here (and a product's install
 from git) runs `scripts/prepare.mjs`, which builds `dist/`. Run the CLI from
-source while developing (`node bin/harness.ts …`); `dist/` is gitignored and
+source while developing (`node bin/reins.ts …`); `dist/` is gitignored and
 rebuilt by `npm run build`. The e2e lane (`npm run test:e2e`) packs the package,
 scaffolds a product, installs the tarball into it and runs the product's own
 `validate`; it is the only check that exercises the package as installed,
@@ -55,10 +55,10 @@ because `npm link` resolves outside `node_modules` and hides the restriction.
 
 ```bash
 npm link                      # once, here
-cd ../some-product && npm link @dom-kelly/harness
-npx harness doctor
+cd ../some-product && npm link @dom-kelly/reins
+npx reins doctor
 ```
 
-Unlink with `npm unlink @dom-kelly/harness && npm install` when done. A linked
+Unlink with `npm unlink @dom-kelly/reins && npm install` when done. A linked
 package runs from source, so it does not prove the packaged install; the e2e
 lane does.

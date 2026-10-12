@@ -21,7 +21,8 @@ or a test, make it one and delete the line.
   natively on 2.1.295+, timeouts included) except on Stop, where exit 2 only
   sends the agent back to a repair it cannot make. `npx <name>` consults the
   public registry unless `--no-install`; an unrelated `harness` package exists
-  there (without a bin today, so the symptom was a silent exit 1).
+  there (without a bin today, so the symptom was a silent exit 1), which is why
+  the bin is `reins` ([decision 0006](./decisions/0006-named-reins.md)).
 - A symlink in the repo breaks `git stash` (used by lint-staged) with "beyond a
   symbolic link"; keep copies and a test that they match.
 - npm records a GitHub git dependency as an SSH URL in the lockfile whatever the

@@ -27,20 +27,20 @@ export function doctor(root: string): Array<Item> {
 		{
 			// This CLI may be a global or linked copy; the hooks in .claude/settings.json
 			// need the product's own. The harness repo runs its hooks from source.
-			label: "harness installed in this repo's node_modules",
+			label: "reins installed in this repo's node_modules",
 			ok:
 				root === packageRoot ||
 				existsSync(
-					path.join(root, 'node_modules/@dom-kelly/harness/package.json'),
+					path.join(root, 'node_modules/@dom-kelly/reins/package.json'),
 				),
 			fix: 'npm install',
 		},
 		{
 			label: config
-				? `harness.json present (synced from ${config.harness}; this CLI is ${packageVersion})`
-				: 'harness.json present',
+				? `reins.json present (synced from ${config.harness}; this CLI is ${packageVersion})`
+				: 'reins.json present',
 			ok: config !== undefined,
-			fix: 'npx harness adopt',
+			fix: 'npx reins adopt',
 		},
 		{
 			label: 'git hooks installed',
