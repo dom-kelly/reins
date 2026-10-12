@@ -26,8 +26,10 @@ Files fall into three kinds, listed in `templates/manifest.json`:
   decisions, gotchas, security, services);
 - the **engine** — in this package only.
 
-Product tooling (test runner, typechecker, build) stays the product's; the
-harness only owns its checks, hooks, templates and policy.
+The harness owns its checks, hooks, templates and policy, and the format and
+lint toolchain (prettier, oxlint, lint-staged via husky; see
+[0008](./0008-harness-owns-format-and-lint.md)). The product keeps its test
+runner, typechecker and build.
 
 The harness repo's own `docs/contributing/` describes developing the harness.
 The product-facing docs live under `templates/`; the two share an ancestor but
