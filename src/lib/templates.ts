@@ -349,7 +349,9 @@ export async function syncTemplates(
 	}
 	// Record which version these files now come from; doctor compares it.
 	const config = check ? undefined : readConfig(root)
-	if (config) writeConfig(root, { ...config, harness: packageVersion })
+	if (config && config.harness !== packageVersion) {
+		writeConfig(root, { ...config, harness: packageVersion })
+	}
 	return report
 }
 

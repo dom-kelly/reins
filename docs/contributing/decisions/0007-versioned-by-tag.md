@@ -38,8 +38,10 @@ it does not update, or pins the previous tag. A bug fix is a patch bump; new
 behaviour, a changed template or anything a product must act on after
 `npx reins sync` is a minor bump; before 1.0 nothing is a major. A change to
 `package-lock.json` alone needs no bump: products resolve the runtime
-dependencies themselves. Tags are only ever added, never moved. Between the
-merge and the workflow's tag (a minute) a fresh install of the new range fails;
-retry. Revisit if products routinely need an unreleased main (a prerelease tag
-scheme), or if two releases a day make the per-PR bump a nuisance (batch the
-changelog and tag by hand).
+dependencies themselves. `^0.x.0` keeps a product within its minor only below
+1.0; at 1.0 the spec becomes `~major.minor.0` to keep that meaning. Prerelease
+tags are not matched by the range, so a prerelease CLI cannot adopt a product.
+Tags are only ever added, never moved. Between the merge and the workflow's tag
+(a minute) a fresh install of the new range fails; retry. Revisit if products
+routinely need an unreleased main (a prerelease tag scheme), or if two releases
+a day make the per-PR bump a nuisance (batch the changelog and tag by hand).

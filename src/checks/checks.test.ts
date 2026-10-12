@@ -238,6 +238,8 @@ async function repoWithMain(root: string, files: Record<string, string>) {
 
 test('repo rules: shipped changes need a version bump and a changelog entry', async () => {
 	const root = await mkdtemp(path.join(tmpdir(), 'harness-bump-'))
+	const git = (...args: Array<string>) =>
+		execFileSync('git', args, { cwd: root, stdio: 'ignore' })
 	try {
 		await repoWithMain(root, {
 			'package.json': '{ "version": "0.1.0" }\n',
@@ -252,33 +254,43 @@ test('repo rules: shipped changes need a version bump and a changelog entry', as
 		}
 		const messages = () =>
 			checkRepoRules(root, config).issues.map((i) => `${i.file}: ${i.message}`)
-		// A rule that is not configured never looks at git.
-		expect(
-			checkRepoRules(root, { harness: '0', product: { name: 'x' } }).issues,
-		).toEqual([])
 		expect(messages()).toEqual([])
 		await writeFile(path.join(root, 'docs/a.md'), 'docs changed\n')
 		expect(messages()).toEqual([])
 		await writeFile(path.join(root, 'src/a.ts'), 'export const a = 2\n')
-		expect(messages()).toEqual([
+		const needsBump = [
 			expect.stringMatching(
 				/^package\.json: 1 shipped file\(s\) changed since origin\/main \(src\/a\.ts\) but version is still 0\.1\.0; bump it/,
 			),
-		])
+		]
+		expect(messages()).toEqual(needsBump)
+		// Not configured: never looks at git.
+		expect(
+			checkRepoRules(root, { harness: '0', product: { name: 'x' } }).issues,
+		).toEqual([])
+		// No origin/main (a fresh repo): nothing to compare, so no issue.
+		git('update-ref', '-d', 'refs/remotes/origin/main')
+		expect(messages()).toEqual([])
+		git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+		expect(messages()).toEqual(needsBump)
 		await writeFile(path.join(root, 'package.json'), '{ "version": "0.2.0" }\n')
 		expect(messages()).toEqual([
 			expect.stringMatching(/^CHANGELOG\.md: .*no `## \[0\.2\.0\]` heading/),
 		])
 		await writeFile(
 			path.join(root, 'CHANGELOG.md'),
-			'# Changelog\n\n## [0.2.0] - 2026-10-12\n\n- more\n\n## [0.1.0]\n\n- first\n',
+			'# Changelog\n\n## [0.2.0]\n\n- more\n\n## [0.1.0]\n\n- first\n',
 		)
 		expect(messages()).toEqual([])
-		// No origin/main (a fresh repo): nothing to compare, so no issue.
-		execFileSync('git', ['update-ref', '-d', 'refs/remotes/origin/main'], {
-			cwd: root,
-		})
+		// main moves on (that release lands) while this branch stays behind: the
+		// branch is judged against where it left main, not main's new version.
+		git('add', '.')
+		git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', '0.2.0')
+		git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+		git('checkout', '-q', 'HEAD~1')
 		expect(messages()).toEqual([])
+		await writeFile(path.join(root, 'src/a.ts'), 'export const a = 3\n')
+		expect(messages()).toEqual(needsBump)
 	} finally {
 		await rm(root, { recursive: true, force: true })
 	}

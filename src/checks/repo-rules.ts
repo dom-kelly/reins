@@ -11,19 +11,30 @@ const lockfiles = {
 	bun: 'bun.lockb',
 } as const
 
+function git(root: string, args: Array<string>) {
+	return execFileSync('git', args, {
+		cwd: root,
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'ignore'],
+	})
+}
+
+/** Where this branch left `ref`: a branch behind main must not be judged on
+ *  main's later changes. Falls back to `ref` itself (no HEAD yet, or `ref`
+ *  missing, which the callers treat as nothing to compare). */
+function mergeBase(root: string, ref: string) {
+	try {
+		return git(root, ['merge-base', ref, 'HEAD']).trim()
+	} catch {
+		return ref
+	}
+}
+
 /** Files that differ between `ref` and the working tree under `prefixes`, or
  *  undefined when the ref does not exist (a fresh repo has no origin/main). */
 function changedSince(root: string, ref: string, prefixes: Array<string>) {
 	try {
-		return execFileSync(
-			'git',
-			['diff', '--name-only', ref, '--', ...prefixes],
-			{
-				cwd: root,
-				encoding: 'utf8',
-				stdio: ['ignore', 'pipe', 'ignore'],
-			},
-		)
+		return git(root, ['diff', '--name-only', ref, '--', ...prefixes])
 			.split('\n')
 			.filter(Boolean)
 	} catch {
@@ -42,18 +53,13 @@ function versionBumpIssues(
 	root: string,
 	prefixes: Array<string>,
 	baseRef: string,
+	base: string,
 ): Array<CheckIssue> {
-	const changed = changedSince(root, baseRef, prefixes)
+	const changed = changedSince(root, base, prefixes)
 	if (!changed?.length) return []
 	let baseVersion: string | undefined
 	try {
-		baseVersion = versionOf(
-			execFileSync('git', ['show', `${baseRef}:package.json`], {
-				cwd: root,
-				encoding: 'utf8',
-				stdio: ['ignore', 'pipe', 'ignore'],
-			}),
-		)
+		baseVersion = versionOf(git(root, ['show', `${base}:package.json`]))
 	} catch {
 		return [] // no package.json on the base yet; nothing to compare
 	}
@@ -118,14 +124,18 @@ export function checkRepoRules(
 			})
 		}
 	}
+	const base = mergeBase(root, baseRef)
 	for (const prefix of checks.appendOnly ?? []) {
 		let changed: string
 		try {
-			changed = execFileSync(
-				'git',
-				['diff', '--name-only', '--diff-filter=MDR', baseRef, '--', prefix],
-				{ cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
-			)
+			changed = git(root, [
+				'diff',
+				'--name-only',
+				'--diff-filter=MDR',
+				base,
+				'--',
+				prefix,
+			])
 		} catch {
 			continue // no such ref yet (fresh repo); nothing to compare
 		}
@@ -137,7 +147,9 @@ export function checkRepoRules(
 		}
 	}
 	if (checks.bumpVersionWhen?.length) {
-		issues.push(...versionBumpIssues(root, checks.bumpVersionWhen, baseRef))
+		issues.push(
+			...versionBumpIssues(root, checks.bumpVersionWhen, baseRef, base),
+		)
 	}
 	return {
 		name: 'repo rules',
