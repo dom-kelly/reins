@@ -40,9 +40,10 @@ head or an earlier commit of the branch (so fixes pushed after the review keep
 it valid; a sha that is not on the branch is refused). `owner` tiers are
 unaffected. `policy.independentReview: false` switches it off.
 
-Always: not a draft, targets `main`, no test file deleted, no other check red or
-pending (except `reviewers.ignoreChecks`). `gh pr merge --admin|--auto` and
-merging through the API are refused outright.
+Always: a PR of this repo (a PR URL from another repo is refused: run the policy
+and the merge from that repo), not a draft, targets `main`, no test file
+deleted, no other check red or pending (except `reviewers.ignoreChecks`).
+`gh pr merge --admin|--auto` and merging through the API are refused outright.
 
 ## Waiting for the verdict
 
@@ -63,12 +64,13 @@ Every evaluation (`npx reins policy`, `--wait`, and the guard on `gh pr merge`)
 writes the verdict to the PR, so the owner reads GitHub rather than the agent's
 terminal:
 
-- **Labels.** Exactly one of `needs-owner` (the policy parked it: the owner
-  merges) or `agent-merges` (the agent finishes it: allowed, waiting on CI or a
-  reviewer, or refused with something the agent must fix), plus
-  `risk:low|medium|high` once the risk is known. Created on first use with
-  `gh label create --force`; other labels are never touched. Filter the PR list
-  on `needs-owner` to see what is yours.
+- **Labels.** Exactly one of `needs-owner` (the owner merges: the tier's
+  authority is `owner`, whether the PR is green yet or still waiting on CI or a
+  reviewer) or `agent-merges` (the agent finishes it: allowed, waiting, or
+  refused with something the agent must fix), plus `risk:low|medium|high` once
+  the risk is known. A label the repo lacks is created when first needed; one it
+  already has is used as it is, and other labels are never touched. Filter the
+  PR list on `needs-owner` to see what is yours.
 - **Assignee.** A parked PR is assigned to `policy.owner`, or to the repo owner
   when the repo belongs to a user. An organisation repo needs `policy.owner`
   set, else nobody is assigned.
@@ -79,9 +81,11 @@ terminal:
 
 The policy is the only writer. Agents and owners do not set these by hand; a
 write that fails is reported as `policy: could not write PR status (…)` and
-never changes the verdict. `policy.publish: false` switches the writes off;
-`--no-publish` does so for one run. The agent's final summary uses the same
-vocabulary: `Shipped`, `Needs you: <action>`, or `Blocked: <what>`.
+never changes the verdict (the other writes still run, and under `--wait` the
+line is repeated with the final verdict, whichever poll it happened on).
+`policy.publish: false` switches the writes off; `--no-publish` does so for one
+run. The agent's final summary uses the same vocabulary: `Shipped`,
+`Needs you: <action>`, or `Blocked: <what>`.
 
 ## After merge
 
@@ -104,11 +108,13 @@ seven hex characters) or `wontfix: <reason>`. This is an honour system: the
 policy checks the words, not the diff. Reviewers not listed are read and handled
 on merit but do not block.
 
-The repo owner's own review threads count too: when the repo belongs to a user,
-that login is added to the default `findingsFrom` (`policy.ownerFindings: false`
-turns this off; an explicit `findingsFrom` list replaces the default). So a
-comment the owner leaves on a PR is answered before an agent merges medium or
-high, not merely read.
+The owner's own review threads count too: `policy.owner`, or the repo owner when
+the repo belongs to a user, is added to the default `findingsFrom`
+(`policy.ownerFindings: false` turns this off; an explicit `findingsFrom` list
+replaces the default). So a comment the owner leaves on a PR is answered before
+an agent merges medium or high, not merely read. When nothing names the owner
+and the lookup fails, the policy refuses rather than quietly dropping those
+findings, and `--wait` retries it.
 
 The independent review comment (`## Independent review`, `head: <sha>`) works
 the same way: the policy checks that a review of a commit on the branch was

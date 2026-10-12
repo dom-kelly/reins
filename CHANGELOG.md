@@ -20,7 +20,15 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
   review threads now count as findings by default (`policy.ownerFindings`).
   `ship-pr`'s final summary uses `Shipped` / `Needs you: <action>` /
   `Blocked: <what>`; "Ready" is retired. The settings template allow-lists
-  `gh pr merge *`, since the guard already runs the policy on every merge.
+  `gh pr merge *`, since the guard already runs the policy on every merge, and
+  gives the guard hook an explicit 120 second timeout for the extra `gh` calls.
+- The policy refuses a PR URL from another repo before reading anything, so a
+  `gh pr merge <url>` cannot be judged against this repo's PR of the same number
+  or write its status there. `policy.owner` joins the default `findingsFrom` (so
+  an organisation repo's named owner is answered too), and when nothing names
+  the owner and the lookup fails the policy refuses instead of dropping those
+  findings. A status write that fails during `--wait` is repeated with the final
+  verdict.
 
 ## [0.3.0] - 2026-10-12
 

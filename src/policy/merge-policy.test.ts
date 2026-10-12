@@ -74,14 +74,18 @@ afterAll(async () => {
 
 // Every simulated PR carries a valid independent review unless a case says
 // otherwise, so the medium/high cases below exercise the rule's happy path.
-function policy(pr: Record<string, string>, args: Array<string> = []) {
+function policy(
+	pr: Record<string, string>,
+	args: Array<string> = [],
+	ref = '7',
+) {
 	const res = spawnSync(
 		'node',
 		[
 			'--disable-warning=ExperimentalWarning',
 			path.join(packageRoot, 'bin/reins.ts'),
 			'policy',
-			'7',
+			ref,
 			...args,
 		],
 		{
@@ -102,6 +106,7 @@ function policy(pr: Record<string, string>, args: Array<string> = []) {
 		allowed: res.status === 0,
 		status: res.status,
 		message: out.at(-1) ?? '',
+		output: out,
 	}
 }
 
@@ -583,6 +588,7 @@ async function published(
 	pr: Record<string, string>,
 	args: Array<string> = [],
 	config?: Record<string, unknown>,
+	ref = '7',
 ) {
 	const log = path.join(product, `gh-${Date.now()}-${Math.random()}.log`)
 	const saved = await readFile(path.join(product, 'reins.json'), 'utf8')
@@ -597,7 +603,7 @@ async function published(
 		)
 	}
 	try {
-		const result = policy({ GH_LOG: log, ...pr }, args)
+		const result = policy({ GH_LOG: log, ...pr }, args, ref)
 		const calls = (await readFile(log, 'utf8').catch(() => ''))
 			.split('\n')
 			.filter(Boolean)
@@ -624,13 +630,17 @@ describe('merge policy: PR status', () => {
 		expect(r.allowed).toBe(false)
 		expect(r.message).toMatch(/needs the user/)
 		expect(r.writes).toContain(
-			'label create needs-owner --color d73a4a --description The shipping policy parked this PR for the owner to merge --force',
+			'label create needs-owner --color d73a4a --description The shipping policy says the owner merges this PR',
 		)
+		expect(r.writes).toContain(
+			'label create risk:high --color e99695 --description Shipping policy: high risk',
+		)
+		expect(r.writes.filter((w) => w.startsWith('label create'))).toHaveLength(2)
 		expect(r.writes).toContain(
 			'api -X DELETE repos/dom-kelly/demo/issues/7/labels/agent-merges',
 		)
 		expect(r.writes).toContain(
-			'api -X DELETE repos/dom-kelly/demo/issues/7/labels/risk:medium',
+			'api -X DELETE repos/dom-kelly/demo/issues/7/labels/risk%3Amedium',
 		)
 		expect(
 			r.writes.some((w) => w.startsWith('api -X DELETE') && w.endsWith('/bug')),
@@ -728,10 +738,100 @@ describe('merge policy: PR status', () => {
 		)
 	})
 
-	it('a write that fails never changes the verdict', async () => {
-		const r = policy({ FILES: 'modified:docs/x.md', LABEL_FAIL: '1' })
-		expect(r.allowed).toBe(true)
-		expect(r.status).toBe(0)
+	it('a write that fails never changes the verdict, is reported, and the other writes still run', async () => {
+		const low = policy({ FILES: 'modified:docs/x.md', LABEL_FAIL: '1' })
+		expect(low.allowed).toBe(true)
+		expect(low.status).toBe(0)
+		expect(low.output).toContainEqual(
+			expect.stringMatching(/^policy: could not write PR status \(labels: /),
+		)
+		// Parked, so every step has something to write: labels fail, the
+		// assignee and the comment are still written, the verdict is unchanged.
+		const parked = await published({
+			FILES: 'modified:drizzle/x.ts',
+			CHANGE: 'adds',
+			CHECKS: BUGBOT,
+			REVIEWERS: 'coderabbitai devin-ai-integration',
+			LABEL_FAIL: '1',
+		})
+		expect(parked.status).toBe(2)
+		expect(parked.message).toMatch(/needs the user/)
+		expect(parked.output).toContainEqual(
+			expect.stringMatching(
+				/^policy: could not write PR status \(labels: .*gh label create needs-owner/,
+			),
+		)
+		expect(parked.writes).toContain(
+			'api -X POST repos/dom-kelly/demo/issues/7/assignees -f assignees[]=dom-kelly',
+		)
+		expect(parked.writes).toContainEqual(
+			expect.stringMatching(
+				/^api -X POST repos\/dom-kelly\/demo\/issues\/7\/comments -F body=@/,
+			),
+		)
+	})
+
+	it('a label the repo already has is used as it is, not recreated', async () => {
+		const r = await published({
+			FILES: 'modified:drizzle/x.ts',
+			CHANGE: 'adds',
+			CHECKS: BUGBOT,
+			REVIEWERS: 'coderabbitai devin-ai-integration',
+			REPO_LABELS: '[{"name":"needs-owner"},{"name":"bug"}]',
+		})
+		expect(r.writes.filter((w) => w.startsWith('label create'))).toEqual([
+			'label create risk:high --color e99695 --description Shipping policy: high risk',
+		])
+	})
+
+	it('a PR URL from another repo is refused before anything is read or written', async () => {
+		const other = await published(
+			{},
+			[],
+			undefined,
+			'https://github.com/other/repo/pull/7',
+		)
+		expect(other.status).toBe(2)
+		expect(other.message).toMatch(
+			/is a PR on other\/repo, not this repo \(dom-kelly\/demo\); run the policy, and the merge, from that repo/,
+		)
+		expect(other.writes).toEqual([])
+		expect(other.calls.some((c) => c.startsWith('pr view'))).toBe(false)
+		// This repo's own URL is fine.
+		const own = await published(
+			{ FILES: 'modified:docs/x.md' },
+			[],
+			undefined,
+			'https://github.com/dom-kelly/demo/pull/7',
+		)
+		expect(own.allowed).toBe(true)
+	})
+
+	it('fails closed when nothing names the owner and the lookup fails; policy.owner needs no lookup', async () => {
+		const medium = {
+			FILES: 'modified:app/routes/shopping.tsx',
+			CHECKS: BUGBOT,
+			OWNER_FAIL: '1',
+		}
+		const defaults = {
+			reviewers: {
+				gate: [{ check: 'Cursor Bugbot', login: 'cursor' }],
+				required: ['coderabbitai', 'devin-ai-integration'],
+				ignoreChecks: ['CodeRabbit'],
+			},
+		}
+		const failed = await published(medium, [], defaults)
+		expect(failed.status).toBe(2)
+		expect(failed.message).toMatch(/couldn't read the repo's owner/)
+		expect(failed.writes).toEqual([])
+		expect(
+			(await published(medium, [], { ...defaults, owner: 'dom-kelly' }))
+				.allowed,
+		).toBe(true)
+		expect(
+			(await published(medium, [], { ...defaults, ownerFindings: false }))
+				.allowed,
+		).toBe(true)
 	})
 
 	it('--no-publish and policy.publish:false write nothing', async () => {
@@ -793,11 +893,19 @@ describe('merge policy: PR status', () => {
 			(await published(medium, [], { ...defaults, ownerFindings: false }))
 				.allowed,
 		).toBe(true)
-		// An organisation has no login to count.
+		// An organisation has no login to count, unless policy.owner names one.
 		expect(
 			(await published({ ...medium, OWNER_TYPE: 'Organization' }, [], defaults))
 				.allowed,
 		).toBe(true)
+		expect(
+			(
+				await published({ ...medium, OWNER_TYPE: 'Organization' }, [], {
+					...defaults,
+					owner: 'dom-kelly',
+				})
+			).message,
+		).toMatch(/review finding\(s\) from dom-kelly not addressed/)
 		// An explicit list is taken as it is.
 		expect(policy(medium).allowed).toBe(true)
 	})
@@ -837,6 +945,27 @@ describe('merge policy: --wait', () => {
 			onVerdict: (v) => seen.push(v.waiting ?? v.message),
 		})
 		expect(seen).toEqual(['ci', 'review', 'ok'])
+	})
+	it('a status write that failed on an earlier poll is reported with the final verdict', async () => {
+		const failure = 'policy: could not write PR status (labels: boom)'
+		const verdicts = [
+			pending('ci'),
+			pending('ci'),
+			{ allowed: true, message: 'ok', lines: ['l'] } as Verdict,
+		]
+		const result = await waitForMerge('.', '7', {
+			intervalMs: 1,
+			evaluate: () => verdicts.shift()!,
+			sleep: async () => {},
+			onWait: () => {},
+			// The publisher appends to the verdict it was given; the first poll's
+			// write fails, the final one's succeeds.
+			onVerdict: (v) => {
+				if (v.waiting === 'ci') v.lines.push(failure)
+			},
+		})
+		expect(result.allowed).toBe(true)
+		expect(result.lines).toEqual(['l', failure])
 	})
 	it('returns a refusal at once', async () => {
 		const no: Verdict = {

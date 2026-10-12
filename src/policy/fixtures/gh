@@ -30,7 +30,9 @@ reviews() {
 }
 case "$*" in
   "repo view"*) echo "dom-kelly/demo" ;;
-  "api repos/dom-kelly/demo --jq"*) printf 'dom-kelly\t%s\n' "${OWNER_TYPE:-User}" ;;
+  "api repos/dom-kelly/demo --jq"*) [ -n "${OWNER_FAIL:-}" ] && { echo "stub gh: owner lookup failing on purpose" >&2; exit 1; }; printf 'dom-kelly\t%s\n' "${OWNER_TYPE:-User}" ;;
+  "label list"*) echo "${REPO_LABELS:-[]}" ;;
+  "api user --jq"*) echo "${ME:-dom-kelly}" ;;
   "label create"*) [ -n "${LABEL_FAIL:-}" ] && { echo "stub gh: label create failing on purpose" >&2; exit 1; }; echo "✓ Label \"$3\" created" ;;
   "api repos/dom-kelly/demo/issues/7/labels --jq"*) jq -r '.[]' <<<"${LABELS:-[]}" ;;
   "pr view 7 --json assignees"*) echo "${ASSIGNEES:-$NOASSIGNEES}" ;;
@@ -43,7 +45,7 @@ case "$*" in
 **Door:** \`${DOOR:-two-way}\`
 **Change:** \`${CHANGE-composes}\`" --argjson c "$CHECKS" --arg base "${BASE:-main}" --arg head "$HEAD" --argjson d "${DRAFT:-false}" \
       '{isDraft:$d,baseRefName:$base,headRefOid:$head,body:$b,statusCheckRollup:$c}' ;;
-  "api --paginate"*"/issues/"*"/comments"*"select("*) jq -c 'to_entries[] | select(.value | startswith("<!-- reins:policy -->")) | {id: (.key + 100), body: .value}' <<<"${COMMENTS:-[]}" ;;
+  "api --paginate"*"/issues/"*"/comments"*"select("*) jq -c --arg me "${COMMENT_LOGIN:-dom-kelly}" 'to_entries[] | select(.value | startswith("<!-- reins:policy -->")) | {id: (.key + 100), body: .value, login: $me}' <<<"${COMMENTS:-[]}" ;;
   "api --paginate"*"/issues/"*"/comments"*) jq -c '.[] | {body: .}' <<<"${COMMENTS:-[]}" ;;
   "api --paginate"*"/pulls/"*"/commits"*) for c in ${COMMITS:-$HEAD}; do echo "$c"; done ;;
   "api --paginate"*"/files"*) for f in $FILES; do st=${f%%:*} p=${f#*:}

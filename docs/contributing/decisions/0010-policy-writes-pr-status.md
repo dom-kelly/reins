@@ -23,14 +23,17 @@ The policy engine is the single writer of a PR's status, on every evaluation
 `gh pr merge`): exactly one of the labels `needs-owner` / `agent-merges`, plus
 `risk:<tier>` once known; the owner assigned when parked (`policy.owner`, or the
 repo owner of a user-owned repo); and one marker-delimited `## Shipping policy`
-comment updated in place with the reason and, when parked, the merge command.
-Labels are created on first use; nothing else on the PR is touched; a failed
-write is reported and never changes the verdict. The agent's summary uses the
-same three words: `Shipped`, `Needs you: <action>`, `Blocked: <what>`. The repo
-owner's review threads are findings by default (`policy.ownerFindings`), so a
-comment from the owner is answered, not merely read. The settings template
-allow-lists `gh pr merge`, because the guard runs the policy on every merge and
-is the gate; a second prompt gated nothing.
+comment updated in place with the reason and, when parked, the merge command. A
+label the repo lacks is created when first needed, one it has is kept as it is;
+nothing else on the PR is touched; a failed write is reported with the verdict
+it belongs to and never changes it. The agent's summary uses the same three
+words: `Shipped`, `Needs you: <action>`, `Blocked: <what>`. The owner's review
+threads (`policy.owner`, else the owner of a user-owned repo) are findings by
+default (`policy.ownerFindings`), so a comment from the owner is answered, not
+merely read. The settings template allow-lists `gh pr merge`, because the guard
+runs the policy on every merge and is the gate; a second prompt gated nothing.
+With that prompt gone the policy also refuses a PR URL from another repo
+outright, since it can only judge, and write to, this one.
 
 ## Consequences
 
