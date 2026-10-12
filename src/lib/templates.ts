@@ -10,7 +10,13 @@ import {
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { configFile, legacyConfigFile } from './config.ts'
+import {
+	configFile,
+	legacyConfigFile,
+	packageVersion,
+	readConfig,
+	writeConfig,
+} from './config.ts'
 import { packageRoot } from './repo.ts'
 
 /** templates/manifest.json: which files the harness writes into a product. */
@@ -32,7 +38,13 @@ export const legacyBaseDir = '.harness/base'
 
 /** The package a product's hooks and scripts call as `npx reins`. */
 export const dependencyName = '@dom-kelly/reins'
-export const dependencySpec = 'git+https://github.com/dom-kelly/reins.git'
+const repoUrl = 'git+https://github.com/dom-kelly/reins.git'
+/** Pinned to the tags of this CLI's major.minor (decision 0007), so a product
+ *  picks up patch releases with `npm update` and moves minor on purpose. */
+export const dependencySpec = `${repoUrl}#semver:^${packageVersion
+	.split('.')
+	.slice(0, 2)
+	.join('.')}.0`
 const legacyDependencyName = '@dom-kelly/harness'
 
 export function loadManifest(templatesDir = defaultTemplatesDir) {
@@ -84,8 +96,10 @@ function sameJson(a: object | undefined, b: object) {
 
 /** Points a product's package.json at reins: the devDependency, the injected
  *  `harness`/`harness:check` scripts and every `npx harness` in a script, so
- *  nothing is left that `npx` could resolve from the public registry. Returns
- *  the new source, or undefined when nothing named the old package. */
+ *  nothing is left that `npx` could resolve from the public registry. A bare
+ *  git URL (tracking main) becomes the pinned spec; any other pin is the
+ *  product's choice. Returns the new source, or undefined when nothing needed
+ *  changing. */
 export function migratePackageJson(source: string): string | undefined {
 	const pkg = JSON.parse(source) as PackageScripts
 	const scripts = remap(pkg.scripts ?? {}, (key, value) => [
@@ -95,7 +109,8 @@ export function migratePackageJson(source: string): string | undefined {
 			.replaceAll('npx harness ', 'npx reins '),
 	])
 	const devDependencies = remap(pkg.devDependencies ?? {}, (key, value) =>
-		key === legacyDependencyName
+		key === legacyDependencyName ||
+		(key === dependencyName && value === repoUrl)
 			? [dependencyName, dependencySpec]
 			: [key, value],
 	)
@@ -111,8 +126,9 @@ export function migratePackageJson(source: string): string | undefined {
 }
 
 /** Moves a product from the old names (`harness.json`, `.harness/base`, the
- *  `@dom-kelly/harness` dependency) to the reins ones where only the old
- *  exist. Returns what happened, one line each, so adopt and sync can say so. */
+ *  `@dom-kelly/harness` dependency, the unpinned git URL) to the reins ones
+ *  where only the old exist. Returns what happened, one line each, so adopt
+ *  and sync can say so. */
 export function migrateLegacyNames(root: string): Array<string> {
 	const lines: Array<string> = []
 	for (const [from, to] of [
@@ -144,7 +160,7 @@ export function migrateLegacyNames(root: string): Array<string> {
 		if (migrated !== undefined) {
 			writeFileSync(pkgFile, migrated)
 			lines.push(
-				`package.json → ${dependencyName} and npx reins (run npm install)`,
+				`package.json → ${dependencyName} (${dependencySpec}) and npx reins (run npm install)`,
 			)
 		}
 	}
@@ -330,6 +346,11 @@ export async function syncTemplates(
 			)
 			report.created.push(rel)
 		}
+	}
+	// Record which version these files now come from; doctor compares it.
+	const config = check ? undefined : readConfig(root)
+	if (config && config.harness !== packageVersion) {
+		writeConfig(root, { ...config, harness: packageVersion })
 	}
 	return report
 }

@@ -17,9 +17,9 @@ npx github:dom-kelly/reins new my-product   # a new product: app, docs, skills, 
 cd my-product && npm run validate
 
 # or, in an existing repo
-npm i -D git+https://github.com/dom-kelly/reins.git
+npm i -D "git+https://github.com/dom-kelly/reins.git#semver:^0.2.0"
 npx reins adopt            # writes what's missing, keeps what's yours
-npx reins sync             # later: pull template updates, keeping local edits
+npm update @dom-kelly/reins && npx reins sync   # later: take a release, merge template updates
 npx reins check            # decisions, links, skills, primitives map, repo rules
 npx reins classify         # which primitives a branch touches, and the risk floor
 npx reins policy 42      # may an agent merge PR 42? the guard runs this on every gh pr merge

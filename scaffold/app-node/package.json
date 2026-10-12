@@ -30,7 +30,7 @@
 		"*": "prettier --write --ignore-unknown"
 	},
 	"devDependencies": {
-		"@dom-kelly/reins": "git+https://github.com/dom-kelly/reins.git",
+		"@dom-kelly/reins": "git+https://github.com/dom-kelly/reins.git#semver:^0.2.0",
 		"@types/node": "^22.18.0",
 		"concurrently": "^9.2.0",
 		"husky": "^9.1.7",

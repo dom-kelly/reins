@@ -23,6 +23,9 @@ export type HarnessConfig = {
 		/** Path prefixes whose markdown links are not checked (mirrors of files
 		 *  that live elsewhere, e.g. the harness repo's copies of its templates). */
 		ignoreLinksIn?: Array<string>
+		/** Path prefixes that ship: a change under them since origin/main needs a
+		 *  new package.json version with a `## [version]` entry in CHANGELOG.md. */
+		bumpVersionWhen?: Array<string>
 	}
 	guard?: {
 		/** Extra Bash patterns the guard hook refuses (regex source + reason). */

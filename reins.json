@@ -1,10 +1,18 @@
 {
-	"harness": "0.1.0",
+	"harness": "0.2.0",
 	"product": {
 		"name": "reins"
 	},
 	"checks": {
-		"ignoreLinksIn": [".claude/skills/"]
+		"ignoreLinksIn": [".claude/skills/"],
+		"bumpVersionWhen": [
+			"src/",
+			"bin/",
+			"templates/",
+			"scaffold/",
+			"scripts/",
+			"package.json"
+		]
 	},
 	"policy": {
 		"gate": "validate",

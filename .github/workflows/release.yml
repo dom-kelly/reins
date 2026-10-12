@@ -1,0 +1,45 @@
+name: Release
+
+# Tags main with package.json's version when that tag does not exist yet.
+# The bump check (reins.json → checks.bumpVersionWhen) makes sure a change to
+# shipped code arrives with a new version, so every merge is either a release
+# or a no-op here. Products pin `#semver:` ranges against these tags.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# One tagging run at a time: a later push waits for the running one instead of
+# racing it to the same tag. GitHub keeps only the newest pending run, so a
+# version skipped that way is covered by the next tag in the same range.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag v<version> unless it exists
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          # --exit-code: 0 when the tag exists, 2 when it does not; anything
+          # else is a failed lookup, not a missing tag.
+          git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null && code=0 || code=$?
+          case $code in
+            0) echo "::notice::$tag already exists; nothing to release"; exit 0 ;;
+            2) ;;
+            *) echo "::error::could not list tags on origin (git exit $code)"; exit 1 ;;
+          esac
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "reins $version"
+          git push origin "refs/tags/$tag"
+          echo "::notice::tagged $tag at $GITHUB_SHA"

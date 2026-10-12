@@ -16,6 +16,7 @@ import { runChecks } from '../checks/run.ts'
 import {
 	configFile,
 	legacyConfigFile,
+	packageVersion,
 	readConfig,
 	writeConfig,
 } from '../lib/config.ts'
@@ -23,6 +24,7 @@ import { packageRoot } from '../lib/repo.ts'
 import {
 	applyTemplates,
 	baseDir,
+	dependencySpec,
 	legacyBaseDir,
 	mergeThreeWay,
 	migratePackageJson,
@@ -80,13 +82,28 @@ test('adopt keeps existing files and only adds to package.json', async () => {
 		)
 		expect(pkg.scripts.test).toBe('vitest run')
 		expect(pkg.scripts.reins).toBe('reins')
-		expect(pkg.devDependencies['@dom-kelly/reins']).toBe(
-			'git+https://github.com/dom-kelly/reins.git',
-		)
+		expect(pkg.devDependencies['@dom-kelly/reins']).toBe(dependencySpec)
 		expect(patchPackageJson(JSON.stringify(pkg)).added).toEqual([])
 	} finally {
 		await rm(root, { recursive: true, force: true })
 	}
+})
+
+test('products pin the harness to a semver range on tags, the same in adopt and the scaffold', async () => {
+	const [major, minor] = packageVersion.split('.')
+	expect(dependencySpec).toBe(
+		`git+https://github.com/dom-kelly/reins.git#semver:^${major}.${minor}.0`,
+	)
+	const scaffold = JSON.parse(
+		await readFile(
+			path.join(packageRoot, 'scaffold/app-node/package.json'),
+			'utf8',
+		),
+	)
+	expect(
+		scaffold.devDependencies['@dom-kelly/reins'],
+		'scaffold/app-node/package.json must pin the current major.minor',
+	).toBe(dependencySpec)
 })
 
 async function fakeTemplates(dir: string, files: Record<string, string>) {
@@ -262,6 +279,44 @@ test('doctor reports whether the harness is installed in the repo itself', async
 	}
 })
 
+test('sync records the CLI version in reins.json; --check does not', async () => {
+	const dir = await tmp('sync-version')
+	const root = path.join(dir, 'repo')
+	const templates = path.join(dir, 'templates')
+	try {
+		await mkdir(root)
+		await fakeTemplates(templates, { 'managed/a.md': 'a\n' })
+		const vars = { name: 'meals' }
+		applyTemplates(root, vars, { overwrite: true, templatesDir: templates })
+		writeConfig(root, { harness: '0.0.1', product: vars })
+		await syncTemplates(root, vars, { check: true, templatesDir: templates })
+		expect(readConfig(root)?.harness).toBe('0.0.1')
+		await syncTemplates(root, vars, { templatesDir: templates })
+		expect(readConfig(root)).toEqual({ harness: packageVersion, product: vars })
+	} finally {
+		await rm(dir, { recursive: true, force: true })
+	}
+})
+
+test('doctor asks for a sync when reins.json was synced from another version', async () => {
+	const root = await tmp('doctor-version')
+	try {
+		const item = () =>
+			doctor(root).find((i) => i.label.startsWith('reins.json'))
+		expect(item()).toMatchObject({ ok: false, fix: 'npx reins adopt' })
+		writeConfig(root, { harness: '0.0.1', product: { name: 'x' } })
+		expect(item()).toMatchObject({
+			ok: false,
+			fix: 'npx reins sync',
+			label: `reins.json synced from 0.0.1 (this CLI is ${packageVersion})`,
+		})
+		writeConfig(root, { harness: packageVersion, product: { name: 'x' } })
+		expect(item()?.ok).toBe(true)
+	} finally {
+		await rm(root, { recursive: true, force: true })
+	}
+})
+
 test('three-way merge keeps both sides when they touch different lines', async () => {
 	const merged = await mergeThreeWay(
 		'1\n2\n3\nmine\n',
@@ -380,7 +435,7 @@ const legacyPackageJson = `${JSON.stringify(
 const renamedAll = [
 	`${legacyConfigFile} → ${configFile}`,
 	`${legacyBaseDir} → ${baseDir}`,
-	'package.json → @dom-kelly/reins and npx reins (run npm install)',
+	`package.json → @dom-kelly/reins (${dependencySpec}) and npx reins (run npm install)`,
 ]
 
 /** Old names gone, config and base copies intact, package.json pointed at
@@ -402,7 +457,7 @@ async function expectMigrated(root: string, baseA: string) {
 		validate: 'concurrently "npm:test" "npx reins check"',
 	})
 	expect(pkg.devDependencies).toMatchObject({
-		'@dom-kelly/reins': 'git+https://github.com/dom-kelly/reins.git',
+		'@dom-kelly/reins': dependencySpec,
 		prettier: '^3.6.0',
 	})
 	expect(JSON.stringify(pkg)).not.toContain('harness')
@@ -479,10 +534,18 @@ test('sync migrates the old names and merges from the moved base; --check only r
 	}
 })
 
-test('package.json migration touches only what named the old package', () => {
+const pinned = (spec: string) =>
+	`{\n  "devDependencies": {\n    "@dom-kelly/reins": "${spec}"\n  }\n}\n`
+
+test('package.json migration touches only what named the old package or tracked main', () => {
 	expect(migratePackageJson('{\n  "name": "x",\n  "scripts": {}\n}\n')).toBe(
 		undefined,
 	)
+	// An unpinned URL tracks main (the problem decision 0007 fixes); a pin of
+	// the product's own is left alone.
+	const bare = 'git+https://github.com/dom-kelly/reins.git'
+	expect(migratePackageJson(pinned(bare))).toBe(pinned(dependencySpec))
+	expect(migratePackageJson(pinned(`${bare}#v0.1.0`))).toBe(undefined)
 	expect(
 		migratePackageJson(
 			'{\n  "scripts": { "harness": "harness", "reins": "reins" },\n  "devDependencies": { "@dom-kelly/reins": "file:x", "@dom-kelly/harness": "y" }\n}\n',
