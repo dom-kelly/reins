@@ -75,6 +75,27 @@ test('a product built from the packed package passes its own validate', async ()
 		expect(helpText.code, helpText.out).toBe(0)
 		expect(helpText.out).toContain('reins sync')
 
+		// The CLI is the only contract (decision 0004): `exports` makes a deep
+		// import of dist/ fail at resolution, while package.json stays
+		// resolvable so tooling can read the installed version.
+		const deepImport = run(
+			'node',
+			[
+				'-e',
+				"import('@dom-kelly/reins/dist/bin/reins.js').then(() => process.exit(0), (e) => { console.error(e.code); process.exit(1) })",
+			],
+			product,
+		)
+		expect(deepImport.code, deepImport.out).toBe(1)
+		expect(deepImport.out).toContain('ERR_PACKAGE_PATH_NOT_EXPORTED')
+		const pkgJson = run(
+			'node',
+			['-e', "console.log(require.resolve('@dom-kelly/reins/package.json'))"],
+			product,
+		)
+		expect(pkgJson.code, pkgJson.out).toBe(0)
+		expect(pkgJson.out).toContain(path.join('@dom-kelly/reins', 'package.json'))
+
 		const format = run('npx', ['prettier', '--check', '.'], product)
 		expect(format.code, format.out).toBe(0)
 		const validate = run('npm', ['run', '-s', 'validate'], product)

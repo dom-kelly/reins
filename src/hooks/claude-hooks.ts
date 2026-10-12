@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import { readConfig, type HarnessConfig } from '../lib/config.ts'
@@ -58,6 +58,70 @@ function hasScript(root: string, script: string) {
 const tail = (text: string, n = 40) =>
 	text.trim().split('\n').slice(-n).join('\n')
 
+/** Shown to the user by Claude Code, which drops stderr from a hook that
+ *  exits 0: a hook that ran nothing must still say so. */
+function notice(message: string) {
+	console.log(JSON.stringify({ systemMessage: message }))
+}
+
+/** Generated or vendored code: a typecheck there is noise, not a signal. */
+const typecheckIgnoredByDefault = [
+	'node_modules/',
+	'dist/',
+	'build/',
+	'.react-router/',
+]
+
+/** Follows symlinks so a root from `git rev-parse` (real path) and a file
+ *  path from Claude Code (as typed) compare equal. The file may not exist
+ *  yet, so the nearest existing ancestor is resolved and the rest appended. */
+function realOrResolved(file: string) {
+	let dir = path.resolve(file)
+	const rest: Array<string> = []
+	for (;;) {
+		try {
+			return path.join(realpathSync(dir), ...rest)
+		} catch {
+			const parent = path.dirname(dir)
+			if (parent === dir) return path.join(dir, ...rest)
+			rest.unshift(path.basename(dir))
+			dir = parent
+		}
+	}
+}
+
+/** The edited file relative to `root` (posix), or undefined when it is
+ *  outside the repo or under an ignored prefix: edits there do not touch the
+ *  product's types, so the hook has nothing to check. */
+export function typecheckTarget(
+	root: string,
+	file: string,
+	config: HarnessConfig | undefined,
+) {
+	const relative = path.relative(
+		realOrResolved(root),
+		realOrResolved(path.resolve(root, file)),
+	)
+	if (!relative || relative.startsWith('..') || path.isAbsolute(relative))
+		return undefined
+	const posix = relative.split(path.sep).join('/')
+	const ignored = [
+		...typecheckIgnoredByDefault,
+		...(config?.hooks?.typecheckIgnore ?? []),
+	]
+	for (const prefix of ignored) {
+		const dir = prefix.replace(/\/+$/, '')
+		if (posix === dir || posix.startsWith(`${dir}/`)) return undefined
+	}
+	return posix
+}
+
+/** The script the typecheck hook runs: `hooks.typecheck` when a product's
+ *  full typecheck is too slow to run on every edit, else `typecheck`. */
+export function typecheckScript(config: HarnessConfig | undefined) {
+	return config?.hooks?.typecheck ?? 'typecheck'
+}
+
 /** PostToolUse on Edit|Write: typecheck after a TypeScript edit; exit 2 feeds
  *  the errors back to the agent. */
 export function runTypecheckHook(
@@ -68,8 +132,16 @@ export function runTypecheckHook(
 		(JSON.parse(input) as { tool_input?: { file_path?: string } }).tool_input
 			?.file_path ?? ''
 	if (!/\.(ts|tsx|mts|cts)$/.test(file)) return 0
-	if (!hasScript(root, 'typecheck')) return 0
-	const { status, output } = runNpmScript(root, 'typecheck')
+	const config = readConfig(root)
+	if (!typecheckTarget(root, file, config)) return 0
+	const script = typecheckScript(config)
+	if (!hasScript(root, script)) {
+		notice(
+			`typecheck hook: no "${script}" script in package.json, so nothing ran (set hooks.typecheck in reins.json)`,
+		)
+		return 0
+	}
+	const { status, output } = runNpmScript(root, script)
 	if (status === 0) return 0
 	console.error(`Typecheck failed after editing ${file}:\n${tail(output)}`)
 	return 2
@@ -102,13 +174,10 @@ export function runGateOnStopHook(
 	if (!dirty.trim()) return 0
 	const gate = stopGateScript(readConfig(root))
 	if (!hasScript(root, gate)) {
-		// Not a block (nothing to run), but say so: a misconfigured stop gate
-		// must not be invisible. Claude Code drops stderr from a hook that exits
-		// 0; a systemMessage on stdout is shown to the user.
-		console.log(
-			JSON.stringify({
-				systemMessage: `validate-on-stop: no "${gate}" script in package.json, so nothing ran (set hooks.stopGate or policy.gate in reins.json)`,
-			}),
+		// Not a block (nothing to run), but a misconfigured stop gate must not
+		// be invisible.
+		notice(
+			`validate-on-stop: no "${gate}" script in package.json, so nothing ran (set hooks.stopGate or policy.gate in reins.json)`,
 		)
 		return 0
 	}
