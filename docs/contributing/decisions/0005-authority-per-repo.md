@@ -27,5 +27,8 @@ pushes to main and routes merges through the policy.
 
 An agent can merge a change to the merge policy itself here. The checks on that
 are the e2e lane, the policy's own tests and the review step in `ship-pr`, not a
-human. Revisit if a self-merged change breaks a product twice, in which case set
-`high: owner` and look at a server-side check.
+human. The policy now verifies that the review step happened: a medium or high
+PR an agent merges needs the `## Independent review` comment for its head (or an
+earlier commit of the branch) that `ship-pr` posts. Revisit if a self-merged
+change breaks a product twice, in which case set `high: owner` and look at a
+server-side check.

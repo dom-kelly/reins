@@ -87,9 +87,12 @@ place are in [growth.md](./growth.md).
 - On any other `gh pr merge` the guard runs the
   [shipping policy](./shipping-policy.md) (`npx reins policy <pr>`) and lets the
   merge through only when it passes; otherwise it prints what the policy is
-  waiting for (a reviewer, an unanswered finding, or the owner). The harness
-  holds neither a branch push nor an in-policy merge for the owner; the policy
-  involves the owner only where `policy.authority` says so.
+  waiting for (a reviewer, an unanswered finding, or the owner).
+  `npx reins policy <pr> --wait` waits for CI and the reviews on the current
+  head and then gives the verdict, so an agent neither polls `gh pr checks` nor
+  re-runs the policy by hand. The harness holds neither a branch push nor an
+  in-policy merge for the owner; the policy involves the owner only where
+  `policy.authority` says so.
 - The Stop hook runs `hooks.stopGate` from `reins.json` (default: the gate,
   `policy.gate`) whenever the working tree is dirty, and sends the agent back to
   fix a failure. It has a 300 second budget and a timeout does not block, so a

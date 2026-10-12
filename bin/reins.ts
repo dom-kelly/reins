@@ -17,7 +17,11 @@ import {
 	runTypecheckHook,
 } from '../src/hooks/claude-hooks.ts'
 import { runGuardBash } from '../src/hooks/guard-bash.ts'
-import { evaluateMerge } from '../src/policy/merge-policy.ts'
+import {
+	evaluateMerge,
+	waitForMerge,
+	type Verdict,
+} from '../src/policy/merge-policy.ts'
 import { packageVersion, readConfig } from '../src/lib/config.ts'
 import { findRepoRoot } from '../src/lib/repo.ts'
 import {
@@ -34,9 +38,23 @@ const help = `reins ${packageVersion} — the agent harness, as a CLI
   reins check [--docs]          decisions, links, skills, primitives map, repo rules
   reins classify [--base ref | --stdin] [--json]   primitives a change touches
   reins doctor                  what a fresh session needs to know
-  reins policy [pr|url|branch]  may an agent merge this PR? (risk tiers, reviewers, authority)
+  reins policy [pr|url|branch] [--wait [--timeout <seconds>]]
+                                may an agent merge this PR? (risk tiers, reviewers, authority);
+                                --wait polls until CI and the reviews are in (default 20 minutes)
   reins hook <guard-bash | typecheck | validate-on-stop | pre-commit | pre-push | node-version>
 `
+
+function seconds(
+	value: string | undefined,
+	option: string,
+	fallback = 20 * 60,
+) {
+	if (value === undefined) return fallback
+	const n = Number(value)
+	if (!Number.isFinite(n) || n < 0)
+		throw new Error(`${option} needs a number of seconds, got ${value}`)
+	return n
+}
 
 async function main(): Promise<number> {
 	const { command, positionals, flags, options } = parseArgs(
@@ -100,9 +118,15 @@ async function main(): Promise<number> {
 			return doctorPassed(items) ? 0 : 1
 		}
 		case 'policy': {
-			const verdict = evaluateMerge(root, positionals[0])
+			const verdict: Verdict & { timedOut?: boolean } = flags.has('--wait')
+				? await waitForMerge(root, positionals[0], {
+						timeoutMs: seconds(options.get('--timeout'), '--timeout') * 1000,
+					})
+				: evaluateMerge(root, positionals[0])
 			for (const line of verdict.lines) console.error(line)
 			console.error(verdict.message)
+			// 1 on timeout so a caller can tell "not yet" from "no".
+			if (verdict.timedOut) return 1
 			return verdict.allowed ? 0 : 2
 		}
 		case 'hook': {

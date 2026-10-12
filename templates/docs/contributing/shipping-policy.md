@@ -33,9 +33,27 @@ A diff that touches a primitive's `invariants` says how each one still holds.
 nothing can let agents merge high risk; a repo whose merges deploy to production
 should keep the owner there.
 
+When an agent is the one merging medium or high, the PR also needs the
+independent review that `ship-pr` posts: an issue comment whose first line is
+`## Independent review` and which has a line `head: <sha>` naming the current
+head or an earlier commit of the branch (so fixes pushed after the review keep
+it valid; a sha that is not on the branch does not count). `owner` tiers are
+unaffected. `policy.independentReview: false` switches it off.
+
 Always: not a draft, targets `main`, no test file deleted, no other check red or
 pending (except `reviewers.ignoreChecks`). `gh pr merge --admin|--auto` and
 merging through the API are refused outright.
+
+## Waiting for the verdict
+
+`npx reins policy <pr> --wait` polls every 20 seconds while the verdict waits on
+something that may still arrive: a check still running or not yet reported on
+the current head, a gate or required reviewer that has not spoken, the
+independent review comment. It reads the head afresh each poll, so a push during
+the wait is followed. It then prints the verdict as usual: exit 0 may merge, 2
+refused, 1 gave up after `--timeout <seconds>` (default 20 minutes), saying what
+it was still waiting for. Prefer it to polling `gh pr checks`, which can report
+the previous run right after a push.
 
 ## After merge
 
@@ -58,6 +76,11 @@ seven hex characters) or `wontfix: <reason>`. This is an honour system: the
 policy checks the words, not the diff. Reviewers not listed are read and handled
 on merit but do not block.
 
+The independent review comment (`## Independent review`, `head: <sha>`) works
+the same way: the policy checks that a review of a commit on the branch was
+posted, not its quality. Findings it raises are fixed and get a
+`Fixed in <sha>: <what>` line appended to that comment.
+
 A finding that has come up before gets encoded, not just fixed: see the
 enforcement ladder in [harness-engineering.md](./harness-engineering.md).
 
@@ -68,6 +91,7 @@ enforcement ladder in [harness-engineering.md](./harness-engineering.md).
 	"gate": "validate",
 	"ciCheck": "validate",
 	"authority": { "low": "agent", "medium": "agent", "high": "owner" },
+	"independentReview": true,
 	"reviewers": {
 		"gate": [{ "check": "Cursor Bugbot", "login": "cursor" }],
 		"required": ["coderabbitai", "devin-ai-integration"],
