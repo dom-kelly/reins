@@ -4,6 +4,14 @@ import path from 'node:path'
 import { checkNodeVersion } from '../checks/node-version.ts'
 import { packageVersion, readConfig } from '../lib/config.ts'
 import { packageRoot } from '../lib/repo.ts'
+import {
+	gh as runGh,
+	minPresenceHistory,
+	neverRan,
+	neverRanFix,
+	reviewerPresence,
+	type PolicyConfig,
+} from '../policy/merge-policy.ts'
 
 type Item = {
 	label: string
@@ -35,6 +43,72 @@ function autoDeleteItem(root: string): Item | undefined {
 		fix: 'gh repo edit --delete-branch-on-merge',
 		info: true,
 	}
+}
+
+const unchecked = (why: string, fix: string): Array<Item> => [
+	{
+		label: `policy.reviewers not checked against the repo: ${why}`,
+		ok: false,
+		fix,
+		info: true,
+	},
+]
+
+/** Every reviewer `policy.reviewers` names must be installed on the repo:
+ *  one that has never run here is a configuration error the policy refuses
+ *  on, so it is a failure here. With no gh, no readable repo or too little
+ *  history the line only informs. */
+function reviewerItems(
+	root: string,
+	reviewers: NonNullable<PolicyConfig['reviewers']>,
+	ghOk: boolean,
+): Array<Item> {
+	const gate = reviewers.gate ?? []
+	const required = reviewers.required ?? []
+	const findingsFrom = reviewers.findingsFrom ?? [
+		...gate.map((g) => g.login),
+		...required,
+	]
+	const named = [
+		...gate.map((g) => ({ name: g.check, kind: 'gate check' as const })),
+		...required.map((name) => ({ name, kind: 'required reviewer' as const })),
+		...findingsFrom
+			.filter((name) => !required.includes(name))
+			.map((name) => ({ name, kind: 'findings reviewer' as const })),
+	]
+	if (!named.length) return []
+	if (!ghOk) return unchecked('gh is not authenticated', 'gh auth login')
+	let presence: ReturnType<typeof reviewerPresence>
+	try {
+		const repo = runGh(
+			['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'],
+			root,
+		)
+		presence = reviewerPresence(root, repo)
+	} catch {
+		return unchecked(
+			"couldn't read the repo's PRs",
+			'run again where gh can see the GitHub repo',
+		)
+	}
+	if (presence.prs < minPresenceHistory)
+		return unchecked(
+			`only ${presence.prs} PR(s) so far (needs ${minPresenceHistory})`,
+			'run again once the repo has a few PRs',
+		)
+	return named.map(({ name, kind }) => {
+		const ok =
+			kind === 'gate check'
+				? presence.checks.has(name)
+				: presence.logins.has(name)
+		return {
+			label: ok
+				? `\`${name}\` (${kind}) has run on this repo`
+				: neverRan(name, kind),
+			ok,
+			fix: neverRanFix,
+		}
+	})
 }
 
 /** What a fresh session needs to know before doing anything. */
@@ -88,6 +162,8 @@ export function doctor(root: string): Array<Item> {
 	]
 	const autoDelete = gh.status === 0 ? autoDeleteItem(root) : undefined
 	if (autoDelete) items.push(autoDelete)
+	if (config?.policy?.reviewers)
+		items.push(...reviewerItems(root, config.policy.reviewers, gh.status === 0))
 	// The Stop hook has a 300 second budget and fails open on a timeout, so a
 	// gate slower than `validate` wants a fast stop gate of its own.
 	const gate = config?.policy?.gate

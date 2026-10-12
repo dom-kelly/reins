@@ -466,6 +466,80 @@ describe('merge policy: independent review (medium and high merged by an agent)'
 	})
 })
 
+/** The exact refusal for a reviewer that reins.json names but the repo has never seen. */
+const refusal = (name: string, kind: string) =>
+	`Merge refused: \`${name}\` is configured in reins.json as a ${kind} but has never run on this repo: install the app or remove it from \`policy.reviewers\`. See docs/contributing/shipping-policy.md.`
+
+describe('merge policy: a declared reviewer must exist on the repo', () => {
+	const medium = { FILES: 'modified:app/routes/shopping.tsx' }
+	const high = { FILES: 'added:drizzle/0009.sql', CHECKS: BUGBOT }
+	/** Three PRs on which no reviewer app has ever run. */
+	const bare = JSON.stringify([
+		{ checks: ['validate'], logins: ['dom-kelly'] },
+		{ checks: ['validate'] },
+		{ checks: ['validate'] },
+	])
+	it('refuses at once, not waits, for a gate check that has never appeared', () => {
+		const result = policy({ ...medium, PRS: bare }, ['--wait'])
+		expect(result.message).toBe(refusal('Cursor Bugbot', 'gate check'))
+		expect(result.status).toBe(2)
+	})
+	it('refuses at once for a required login that has never appeared', () => {
+		const result = policy({ ...high, PRS: bare, REVIEWERS: 'coderabbitai' }, [
+			'--wait',
+		])
+		expect(result.message).toBe(
+			refusal('devin-ai-integration', 'required reviewer'),
+		)
+		expect(result.status).toBe(2)
+	})
+	it('still waits for a reviewer that appeared on an earlier PR but not this head', () => {
+		// The default history has Bugbot's check, and devin's login with a
+		// `[bot]` suffix that GitHub's REST API adds.
+		const gate = policy(medium, ['--wait', '--timeout', '0'])
+		expect(gate.message).toMatch(/still waiting for Cursor Bugbot to pass/)
+		expect(gate.status).toBe(1)
+		const required = policy({ ...high, REVIEWERS: 'coderabbitai' }, [
+			'--wait',
+			'--timeout',
+			'0',
+		])
+		expect(required.message).toMatch(
+			/still waiting for a review from devin-ai-integration on the current commit/,
+		)
+		expect(required.status).toBe(1)
+	})
+	it("counts the current PR's own checks and reviews as having appeared", () => {
+		const result = policy(
+			{
+				...high,
+				PRS: bare,
+				REVIEWERS: 'coderabbitai devin-ai-integration@def5678',
+			},
+			['--wait', '--timeout', '0'],
+		)
+		expect(result.message).toMatch(
+			/still waiting for a review from devin-ai-integration/,
+		)
+		expect(result.status).toBe(1)
+	})
+	it('falls back to waiting with fewer than three PRs of history', () => {
+		const two = JSON.stringify([{ checks: ['validate'] }, { checks: [] }])
+		const result = policy({ ...medium, PRS: two }, ['--wait', '--timeout', '0'])
+		expect(result.message).toMatch(/still waiting for Cursor Bugbot to pass/)
+		expect(result.status).toBe(1)
+	})
+	it('falls back to waiting when the lookup fails', () => {
+		const result = policy({ ...medium, PRS: 'fail' }, [
+			'--wait',
+			'--timeout',
+			'0',
+		])
+		expect(result.message).toMatch(/still waiting for Cursor Bugbot to pass/)
+		expect(result.status).toBe(1)
+	})
+})
+
 const pending = (what: string): Verdict => ({
 	allowed: false,
 	message: `Merge refused: waiting for ${what}.`,

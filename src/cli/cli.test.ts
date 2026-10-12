@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { chmodSync, existsSync } from 'node:fs'
 import {
 	mkdir,
 	mkdtemp,
@@ -33,6 +33,7 @@ import {
 } from '../lib/templates.ts'
 import { adoptRepo, patchPackageJson } from './adopt.ts'
 import { parseArgs } from './args.ts'
+import { forgetPresence } from '../policy/merge-policy.ts'
 import { doctor, doctorPassed, formatDoctor } from './doctor.ts'
 import { createProduct } from './new.ts'
 
@@ -452,6 +453,96 @@ test('doctor suggests a fast stop gate when the merge gate is not validate', asy
 		})
 		expect(item()).toBeUndefined()
 	} finally {
+		await rm(root, { recursive: true, force: true })
+	}
+})
+
+test('doctor reports a reviewer in policy.reviewers that has never run on the repo', async () => {
+	const root = await tmp('doctor-reviewers')
+	const env = {
+		PATH: process.env.PATH,
+		PRS: process.env.PRS,
+		FAIL: process.env.FAIL,
+	}
+	// The stub gh answers the presence lookup from PRS (see src/policy/fixtures/gh).
+	chmodSync(path.join(packageRoot, 'src/policy/fixtures/gh'), 0o755)
+	process.env.PATH = `${path.join(packageRoot, 'src/policy/fixtures')}:${process.env.PATH}`
+	delete process.env.FAIL
+	const reviewers = {
+		gate: [{ check: 'Cursor Bugbot', login: 'cursor' }],
+		required: ['devin-ai-integration'],
+	}
+	writeConfig(root, {
+		harness: packageVersion,
+		product: { name: 'x' },
+		policy: { reviewers },
+	})
+	const items = () =>
+		(forgetPresence(), doctor(root)).filter(
+			(i) =>
+				i.label.includes('has run on this repo') ||
+				i.label.includes('has never run on this repo') ||
+				i.label.startsWith('policy.reviewers not checked'),
+		)
+	const missing =
+		'`devin-ai-integration` is configured in reins.json as a required reviewer but has never run on this repo'
+	try {
+		// Every reviewer has appeared (the stub's default history): one ok line each.
+		delete process.env.PRS
+		expect(items().map((i) => [i.label, i.ok])).toEqual([
+			['`Cursor Bugbot` (gate check) has run on this repo', true],
+			['`devin-ai-integration` (required reviewer) has run on this repo', true],
+			['`cursor` (findings reviewer) has run on this repo', true],
+		])
+		// One has never run: a failure, with the policy's own message.
+		process.env.PRS = JSON.stringify([
+			{ checks: ['validate', 'Cursor Bugbot'], logins: ['cursor'] },
+			{ checks: ['validate'] },
+			{ checks: ['validate'] },
+		])
+		const bad = items().find((i) => !i.ok)
+		expect(bad).toMatchObject({
+			label: missing,
+			fix: 'install the app or remove it from `policy.reviewers`',
+		})
+		expect(bad?.info).toBeUndefined()
+		forgetPresence()
+		expect(doctorPassed(doctor(root))).toBe(false)
+		expect(formatDoctor([bad!])).toBe(
+			`❌ ${missing} → install the app or remove it from \`policy.reviewers\``,
+		)
+		// Too little history, or no gh: a note, never a failure.
+		process.env.PRS = JSON.stringify([{ checks: ['validate'] }])
+		expect(items()).toEqual([
+			{
+				label:
+					'policy.reviewers not checked against the repo: only 1 PR(s) so far (needs 3)',
+				ok: false,
+				fix: 'run again once the repo has a few PRs',
+				info: true,
+			},
+		])
+		process.env.FAIL = '1'
+		expect(items()).toMatchObject([
+			{
+				label:
+					'policy.reviewers not checked against the repo: gh is not authenticated',
+				info: true,
+			},
+		])
+		delete process.env.FAIL
+		// Nothing declared, nothing to say.
+		writeConfig(root, {
+			harness: packageVersion,
+			product: { name: 'x' },
+			policy: { reviewers: {} },
+		})
+		expect(items()).toEqual([])
+	} finally {
+		for (const [key, value] of Object.entries(env)) {
+			if (value === undefined) delete process.env[key]
+			else process.env[key] = value
+		}
 		await rm(root, { recursive: true, force: true })
 	}
 })

@@ -197,6 +197,118 @@ type Threads = {
 	}
 }
 
+/** Which check runs and which reviewer/commenter logins have ever appeared
+ *  on the repo's recent PRs. A reviewer named in `policy.reviewers` that is
+ *  absent here is not installed on the repo. */
+export type Presence = {
+	/** PRs looked at; under `minPresenceHistory` is too little to judge. */
+	prs: number
+	checks: Set<string>
+	logins: Set<string>
+}
+
+/** Fewer PRs than this and a reviewer's absence proves nothing. */
+export const minPresenceHistory = 3
+/** How many recent PRs the lookup reads. */
+export const presenceWindow = 20
+
+type RecentPulls = {
+	data: {
+		repository: {
+			pullRequests: {
+				nodes: Array<{
+					number: number
+					reviews: { nodes: Array<{ author: { login: string } | null }> }
+					comments: { nodes: Array<{ author: { login: string } | null }> }
+					commits: {
+						nodes: Array<{
+							commit: {
+								statusCheckRollup: {
+									contexts: {
+										nodes: Array<{ name?: string; context?: string }>
+									}
+								} | null
+							}
+						}>
+					}
+				}>
+			}
+		}
+	}
+}
+
+/** GitHub's REST API names a bot `cursor[bot]`; GraphQL and reins.json say `cursor`. */
+export function botLogin(login: string) {
+	return login.replace(/\[bot\]$/, '')
+}
+
+/** Lives for the process: `--wait` looks up once, however many polls. */
+const presenceCache = new Map<string, Presence>()
+
+/** For an in-process caller (doctor's tests) that simulates several repos. */
+export function forgetPresence() {
+	presenceCache.clear()
+}
+
+/** One GraphQL call: the last `presenceWindow` PRs (open or closed) with the
+ *  check runs and status contexts on each head and the logins of every review
+ *  and comment. Cached per repo for the process, so `--wait` looks once. */
+export function reviewerPresence(root: string, repo: string): Presence {
+	const cached = presenceCache.get(repo)
+	if (cached) return cached
+	const [owner, name] = repo.split('/')
+	const recent = JSON.parse(
+		gh(
+			[
+				'api',
+				'graphql',
+				'-f',
+				`owner=${owner}`,
+				'-f',
+				`name=${name}`,
+				'-F',
+				`first=${presenceWindow}`,
+				'-f',
+				'query=query($owner:String!,$name:String!,$first:Int!){repository(owner:$owner,name:$name){pullRequests(first:$first,orderBy:{field:CREATED_AT,direction:DESC}){nodes{number reviews(first:100){nodes{author{login}}} comments(first:100){nodes{author{login}}} commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{... on CheckRun{name} ... on StatusContext{context}}}}}}}}}}}',
+			],
+			root,
+		),
+	) as RecentPulls
+	const pulls = recent.data.repository.pullRequests.nodes
+	const presence: Presence = {
+		prs: pulls.length,
+		checks: new Set(
+			pulls.flatMap((p) =>
+				p.commits.nodes.flatMap(
+					(c) =>
+						c.commit.statusCheckRollup?.contexts.nodes.flatMap(
+							(n) => n.name ?? n.context ?? [],
+						) ?? [],
+				),
+			),
+		),
+		logins: new Set(
+			pulls.flatMap((p) =>
+				[...p.reviews.nodes, ...p.comments.nodes].flatMap((n) =>
+					n.author ? [botLogin(n.author.login)] : [],
+				),
+			),
+		),
+	}
+	presenceCache.set(repo, presence)
+	return presence
+}
+
+/** The refusal (and doctor line) for a reviewer that is declared but absent. */
+export function neverRan(
+	name: string,
+	kind: 'gate check' | 'required reviewer' | 'findings reviewer',
+) {
+	return `\`${name}\` is configured in reins.json as a ${kind} but has never run on this repo`
+}
+export const neverRanFix =
+	'install the app or remove it from `policy.reviewers`'
+
 export function evaluateMerge(root: string, prRef?: string): Verdict {
 	const lines: Array<string> = []
 	const no = (message: string): Verdict => ({
@@ -386,9 +498,38 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 		return authority.low === 'agent' ? yes('CI green') : park('CI green')
 	}
 
+	// A reviewer is waited for only if it exists on the repo: one that has
+	// never run here (the app is not installed) is a configuration error, and
+	// `--wait` must not sit out its timeout on it. The current PR's own checks
+	// and reviews count as having appeared; with too little history, or when
+	// the lookup fails, the wait stands.
+	const seen = (
+		own: Iterable<string>,
+		of: 'checks' | 'logins',
+		name: string,
+	): boolean | undefined => {
+		if ([...own].includes(name)) return true
+		let presence: Presence
+		try {
+			presence = reviewerPresence(root, repo)
+		} catch {
+			return undefined
+		}
+		if (presence.prs < minPresenceHistory) return undefined
+		return presence[of].has(name)
+	}
+
 	// Medium and high: gate reviewers passed, their findings addressed.
 	for (const { check } of gateReviewers) {
 		if (!checks.some((c) => c.name === check && c.state === 'SUCCESS')) {
+			if (
+				seen(
+					checks.map((c) => c.name),
+					'checks',
+					check,
+				) === false
+			)
+				return no(`${neverRan(check, 'gate check')}: ${neverRanFix}`)
 			return wait(`${check} to pass (risk=${risk})`)
 		}
 	}
@@ -458,9 +599,13 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 			.filter((r) => r.state !== 'PENDING' && r.commit?.oid === info.headRefOid)
 			.map((r) => r.author.login),
 	)
+	const everReviewed = pull.reviews.nodes.map((r) => botLogin(r.author.login))
 	for (const login of required) {
-		if (!reviewed.has(login))
+		if (!reviewed.has(login)) {
+			if (seen(everReviewed, 'logins', login) === false)
+				return no(`${neverRan(login, 'required reviewer')}: ${neverRanFix}`)
 			return wait(`a review from ${login} on the current commit (risk=high)`)
+		}
 	}
 	const why = required.length ? 'all reviewers done' : 'CI green'
 	return authority.high === 'agent' ? yes(why) : park(why)

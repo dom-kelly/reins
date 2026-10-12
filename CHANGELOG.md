@@ -4,6 +4,23 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.2.8] - 2026-10-12
+
+- A reviewer named in `policy.reviewers` must exist on the repo. Before
+  `reins policy` waits for a gate check to pass or a required login to review
+  the head, it looks up which check runs and which review/comment logins have
+  appeared on the repo's last 20 PRs (one GraphQL call per run, cached; the
+  current PR's own checks and reviews count; a `[bot]` suffix is ignored). One
+  that has never appeared is refused at once with "`<name>` is configured in
+  reins.json as a gate check | required reviewer but has never run on this repo:
+  install the app or remove it from `policy.reviewers`", so `--wait` returns
+  exit 2 instead of sitting out its timeout on an app that was copied from
+  another repo's tiers. With fewer than three PRs, or when the lookup fails, it
+  waits as before. `reins doctor` reports the same per configured reviewer (gate
+  checks, required and `findingsFrom` logins): ❌ when one has never run, ℹ️
+  when there are too few PRs or `gh` cannot read the repo. Not part of
+  `reins check`, which stays offline.
+
 ## [0.2.7] - 2026-10-12
 
 - The husky hooks fail closed: `.husky/pre-commit` and `pre-push` now run
