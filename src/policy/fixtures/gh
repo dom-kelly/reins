@@ -4,6 +4,7 @@
 # THREADS (JSON), REVIEWERS (logins; "login@oid" to review an older commit;
 # "login:PENDING" for a pending review), COMMENTS (JSON list of issue comment
 # bodies), COMMITS (shas on the PR branch; default HEAD), DRAFT, BASE, HEAD,
+# MERGEABLE (default MERGEABLE), MERGE_STATE (default CLEAN),
 # PRS (JSON list of the repo's recent PRs as {checks:[check runs],
 # contexts:[status contexts],logins:[review and comment logins]};
 # "fail" makes that one lookup fail; default: three PRs on which every reviewer
@@ -43,8 +44,8 @@ case "$*" in
   *"--json number"*) echo 7 ;;
   "pr view"*) jq -n --arg b "## Intent
 **Door:** \`${DOOR:-two-way}\`
-**Change:** \`${CHANGE-composes}\`" --argjson c "$CHECKS" --arg base "${BASE:-main}" --arg head "$HEAD" --argjson d "${DRAFT:-false}" \
-      '{isDraft:$d,baseRefName:$base,headRefOid:$head,body:$b,statusCheckRollup:$c}' ;;
+**Change:** \`${CHANGE-composes}\`" --argjson c "$CHECKS" --arg base "${BASE:-main}" --arg head "$HEAD" --argjson d "${DRAFT:-false}" --arg m "${MERGEABLE:-MERGEABLE}" --arg ms "${MERGE_STATE:-CLEAN}" \
+      '{isDraft:$d,baseRefName:$base,headRefOid:$head,body:$b,statusCheckRollup:$c,mergeable:$m,mergeStateStatus:$ms}' ;;
   "api --paginate"*"/issues/"*"/comments"*"select("*) jq -c --arg me "${COMMENT_LOGIN:-dom-kelly}" 'to_entries[] | select(.value | startswith("<!-- reins:policy -->")) | {id: (.key + 100), body: .value, login: $me}' <<<"${COMMENTS:-[]}" ;;
   "api --paginate"*"/issues/"*"/comments"*) jq -c '.[] | {body: .}' <<<"${COMMENTS:-[]}" ;;
   "api --paginate"*"/pulls/"*"/commits"*) for c in ${COMMITS:-$HEAD}; do echo "$c"; done ;;

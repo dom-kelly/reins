@@ -41,11 +41,13 @@ it valid; a sha that is not on the branch is refused). `owner` tiers are
 unaffected. `policy.independentReview: false` switches it off.
 
 Always: a PR of this repo (a PR URL from another repo is refused: run the policy
-and the merge from that repo), not a draft, targets `main`, a body with exactly
-one `**Door:**` and one `**Change:**` line as the PR template has them (the
-`Cleanup:` line is for the reader), no test file deleted, no other check red or
-pending (except `reviewers.ignoreChecks`). `gh pr merge --admin|--auto` and
-merging through the API are refused outright.
+and the merge from that repo), not a draft, targets `main`, merges cleanly (a
+conflicting branch, or one behind `main` where the repo requires it up to date,
+is refused with "merge main into the branch": the guard refuses a force push, so
+not a rebase), a body with exactly one `**Door:**` and one `**Change:**` line as
+the PR template has them (the `Cleanup:` line is for the reader), no test file
+deleted, no other check red or pending (except `reviewers.ignoreChecks`).
+`gh pr merge --admin|--auto` and merging through the API are refused outright.
 
 ## Waiting for the verdict
 
