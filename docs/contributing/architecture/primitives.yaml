@@ -107,10 +107,15 @@ primitives:
     group: content
     name: Releases
     summary:
-      The changelog and the workflow that tags main with package.json's version.
+      The change notes, the changelog, and the release step the workflow runs on
+      main to write the version and tag.
     floor: medium
     code:
       - CHANGELOG.md
+      - changes
+      - scripts/release.ts
+      - src/release
       - .github/workflows/release.yml
     docs:
       - docs/contributing/decisions/0007-versioned-by-tag.md
+      - docs/contributing/decisions/0011-release-from-change-notes.md

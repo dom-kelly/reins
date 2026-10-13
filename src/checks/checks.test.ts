@@ -272,7 +272,7 @@ test('repo rules: shipped changes need a version bump and a changelog entry', as
 		await writeFile(path.join(root, 'src/a.ts'), 'export const a = 2\n')
 		const needsBump = [
 			expect.stringMatching(
-				/^package\.json: 1 shipped file\(s\) changed since origin\/main \(src\/a\.ts\) but version is still 0\.1\.0; bump it/,
+				/^package\.json: 1 shipped file\(s\) changed since origin\/main \(src\/a\.ts\) but there is no change note; add `changes\/<branch>\.md`.*or bump the version from 0\.1\.0/,
 			),
 		]
 		expect(messages()).toEqual(needsBump)
@@ -302,6 +302,18 @@ test('repo rules: shipped changes need a version bump and a changelog entry', as
 		git('checkout', '-q', 'HEAD~1')
 		expect(messages()).toEqual([])
 		await writeFile(path.join(root, 'src/a.ts'), 'export const a = 3\n')
+		expect(messages()).toEqual(needsBump)
+		// A change note is the other way (decision 0011): as soon as it is
+		// written, untracked, and only when this branch added it.
+		await mkdir(path.join(root, 'changes'))
+		await writeFile(path.join(root, 'changes/README.md'), '# notes\n')
+		expect(messages()).toEqual(needsBump)
+		await writeFile(path.join(root, 'changes/fix.md'), 'patch\n\n- fix\n')
+		expect(messages()).toEqual([])
+		git('add', '.')
+		git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'note')
+		git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+		await writeFile(path.join(root, 'src/a.ts'), 'export const a = 4\n')
 		expect(messages()).toEqual(needsBump)
 	} finally {
 		await rm(root, { recursive: true, force: true })

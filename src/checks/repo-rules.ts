@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import type { HarnessConfig } from '../lib/config.ts'
 import type { CheckIssue, CheckResult } from '../lib/repo.ts'
+import { fragmentFiles, fragmentsDir } from '../release/release.ts'
 
 const lockfiles = {
 	npm: 'package-lock.json',
@@ -46,9 +47,30 @@ function versionOf(source: string) {
 	return (JSON.parse(source) as { version?: string }).version
 }
 
-/** A change to shipped code needs a release: a bumped package.json version and
- *  a `## [version]` heading in CHANGELOG.md, so merging main tags a release
- *  that products pick up by a semver range rather than tracking main. */
+/** Change notes this branch added under `changes/` (decision 0011): files
+ *  there now that the base tree did not have. Untracked counts, so the note
+ *  satisfies the check as soon as it is written. */
+function changeNotesAdded(root: string, base: string): Array<string> {
+	const here = fragmentFiles(root)
+	if (!here.length) return []
+	let atBase: Set<string>
+	try {
+		atBase = new Set(
+			git(root, ['ls-tree', '--name-only', '-r', base, '--', fragmentsDir])
+				.split('\n')
+				.filter(Boolean),
+		)
+	} catch {
+		atBase = new Set()
+	}
+	return here.filter((file) => !atBase.has(file))
+}
+
+/** A change to shipped code needs a release: a change note under `changes/`
+ *  (the release workflow folds it into the changelog and bumps the version,
+ *  decision 0011), or the bump itself: a new package.json version with a
+ *  `## [version]` heading in CHANGELOG.md. Either way merging main tags a
+ *  release that products pick up by a semver range rather than tracking main. */
 function versionBumpIssues(
 	root: string,
 	prefixes: Array<string>,
@@ -57,6 +79,7 @@ function versionBumpIssues(
 ): Array<CheckIssue> {
 	const changed = changedSince(root, base, prefixes)
 	if (!changed?.length) return []
+	if (changeNotesAdded(root, base).length) return []
 	let baseVersion: string | undefined
 	try {
 		baseVersion = versionOf(git(root, ['show', `${base}:package.json`]))
@@ -72,7 +95,7 @@ function versionBumpIssues(
 		return [
 			{
 				file: 'package.json',
-				message: `${what} but version is still ${baseVersion}; bump it (patch for fixes, minor for new behaviour) and add \`## [<new version>]\` to CHANGELOG.md`,
+				message: `${what} but there is no change note; add \`${fragmentsDir}/<branch>.md\` (first line \`patch\` or \`minor\`, then the changelog text), or bump the version from ${baseVersion} and add \`## [<new version>]\` to CHANGELOG.md`,
 			},
 		]
 	}

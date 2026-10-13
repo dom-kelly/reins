@@ -96,21 +96,49 @@ runs the product's own `validate`:
 ## Releasing
 
 A release is a tag; products pin a range on tags
-([decision 0007](./decisions/0007-versioned-by-tag.md)).
+([decision 0007](./decisions/0007-versioned-by-tag.md)). The version is written
+by the release workflow, not by the PR
+([decision 0011](./decisions/0011-release-from-change-notes.md)).
 
 1. In the PR that changes shipped code (`src/`, `bin/`, `templates/`,
-   `scaffold/`, `plugin/`, `.claude-plugin/`, `scripts/`, `package.json`), bump
-   `version` in `package.json` (`npm version patch|minor --no-git-tag-version`)
-   and in `plugin/.claude-plugin/plugin.json` (a test keeps them equal), and add
-   a `## [<version>]` entry to `CHANGELOG.md`. The repo rules check in
-   `npm run validate` fails without both; a change to `package-lock.json` alone
-   needs neither.
-2. On merge, `.github/workflows/release.yml` tags main `v<version>` when no such
-   tag exists.
-3. Products depend on `git+https://github.com/dom-kelly/reins.git#semver:^0.4.0`
+   `scaffold/`, `plugin/`, `.claude-plugin/`, `scripts/`, `package.json`), add a
+   change note: `changes/<branch>.md`, first line `patch` (a fix) or `minor`
+   (new behaviour, a changed template, anything a product must act on after
+   `npx reins sync`), then the changelog text. The repo rules check in
+   `npm run validate` fails without one; a change to `package-lock.json` alone
+   needs none. `node scripts/release.ts --check` shows the release the notes on
+   your branch would make. (The old form, bumping `package.json` and adding the
+   `## [<version>]` heading yourself, is still accepted.)
+2. On merge, `.github/workflows/release.yml` folds the notes into
+   `CHANGELOG.md`, writes the next version into `package.json`,
+   `package-lock.json` and `plugin/.claude-plugin/plugin.json`, commits to main
+   as the reins bot and tags `v<version>`. Two PRs with notes merge in any
+   order; neither waits for the other.
+3. Products depend on `git+https://github.com/dom-kelly/reins.git#semver:^0.5.0`
    and take a release with `npm update @dom-kelly/reins && npx reins sync`. A
    new minor is taken by editing the spec; `reins adopt` writes the current
    major.minor and a test keeps `scaffold/app-node/package.json` on it.
+
+### The reins bot (owner setup, once)
+
+Main is protected (validate required, linear history, admins enforced), so the
+release commit needs an identity the ruleset lets bypass. That is a GitHub App,
+which is also the identity to give an agent for merges and review replies if
+those should stop appearing as the owner. Until it exists the workflow tags
+by-hand bumps and warns that the notes are waiting.
+
+1. Create the app at https://github.com/settings/apps/new: name `reins-bot`, no
+   webhook, repository permissions Contents: read and write, Pull requests: read
+   and write, Metadata: read. Install it on `dom-kelly/reins`. Generate a
+   private key.
+2. `gh variable set REINS_BOT_APP_ID --body <app id>` and
+   `gh secret set REINS_BOT_PRIVATE_KEY < reins-bot.private-key.pem`.
+3. Move the protection to a ruleset with the app as a bypass actor (classic
+   branch protection has no bypass for apps): in Settings → Rules → Rulesets,
+   new branch ruleset on `main` with the same rules (require a pull request:
+   off; require status checks: `validate`; require linear history; block force
+   pushes; restrict deletions) and `reins-bot` under bypass; then remove the
+   classic protection.
 
 ## Trying it against a real product
 

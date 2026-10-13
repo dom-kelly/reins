@@ -1,9 +1,15 @@
 name: Release
 
-# Tags main with package.json's version when that tag does not exist yet.
-# The bump check (reins.json → checks.bumpVersionWhen) makes sure a change to
-# shipped code arrives with a new version, so every merge is either a release
-# or a no-op here. Products pin `#semver:` ranges against these tags.
+# Every push to main is a release or a no-op (decision 0011):
+#   1. When package.json's version has no tag yet (a PR bumped it by hand,
+#      the pre-0011 rule, still accepted), tag it.
+#   2. When change notes are under changes/, fold them into CHANGELOG.md,
+#      write the next version, commit to main and tag it. That commit needs
+#      an identity that may push to the protected branch: the reins bot, a
+#      GitHub App whose id and private key are the REINS_BOT_APP_ID and
+#      REINS_BOT_PRIVATE_KEY secrets and which the ruleset lets bypass.
+#      Without them the notes wait, with a warning here, until they exist.
+# Products pin `#semver:` ranges against the tags.
 
 on:
   push:
@@ -12,20 +18,35 @@ on:
 permissions:
   contents: write
 
-# One tagging run at a time: a later push waits for the running one instead of
-# racing it to the same tag. GitHub keeps only the newest pending run, so a
-# version skipped that way is covered by the next tag in the same range.
+# One release at a time: a later push waits for the running one instead of
+# racing it to the same tag or commit. GitHub keeps only the newest pending
+# run; the notes it would have released are still there for that run.
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  tag:
+  release:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
+      - name: Bot token (when the reins bot is set up)
+        id: bot
+        if: vars.REINS_BOT_APP_ID != ''
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.REINS_BOT_APP_ID }}
+          private-key: ${{ secrets.REINS_BOT_PRIVATE_KEY }}
       - uses: actions/checkout@v4
-      - name: Tag v<version> unless it exists
+        with:
+          fetch-depth: 0
+          # The bot's token when there is one, so the release commit may be
+          # pushed to main; else the default token, which may still tag.
+          token: ${{ steps.bot.outputs.token || github.token }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Tag package.json's version unless it exists
         run: |
           set -euo pipefail
           version=$(node -p "require('./package.json').version")
@@ -34,12 +55,34 @@ jobs:
           # else is a failed lookup, not a missing tag.
           git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null && code=0 || code=$?
           case $code in
-            0) echo "::notice::$tag already exists; nothing to release"; exit 0 ;;
-            2) ;;
+            0) echo "::notice::$tag already exists" ;;
+            2)
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git tag -a "$tag" -m "reins $version"
+              git push origin "refs/tags/$tag"
+              echo "::notice::tagged $tag at $GITHUB_SHA"
+              ;;
             *) echo "::error::could not list tags on origin (git exit $code)"; exit 1 ;;
           esac
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$tag" -m "reins $version"
-          git push origin "refs/tags/$tag"
-          echo "::notice::tagged $tag at $GITHUB_SHA"
+      - name: Release the change notes
+        env:
+          HAS_BOT: ${{ steps.bot.outputs.token != '' }}
+        run: |
+          set -euo pipefail
+          git fetch -q --tags origin
+          if ! node scripts/release.ts --check | tee /tmp/plan | grep -q '→'; then
+            exit 0
+          fi
+          if [ "$HAS_BOT" != "true" ]; then
+            echo "::warning::$(cat /tmp/plan) is waiting for the reins bot (REINS_BOT_APP_ID variable, REINS_BOT_PRIVATE_KEY secret, ruleset bypass); see docs/contributing/developing.md, Releasing"
+            exit 0
+          fi
+          version=$(node scripts/release.ts | tee /dev/stderr | tail -n 1)
+          git config user.name "reins-bot[bot]"
+          git config user.email "reins-bot[bot]@users.noreply.github.com"
+          git add -A changes package.json package-lock.json plugin/.claude-plugin/plugin.json CHANGELOG.md
+          git commit -q -m "Release v$version"
+          git tag -a "v$version" -m "reins $version"
+          git push origin HEAD:main "refs/tags/v$version"
+          echo "::notice::released v$version"

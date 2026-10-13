@@ -16,6 +16,7 @@ template.
 - [0008 — The harness owns the format and lint toolchain; the product keeps the rest](./0008-harness-owns-format-and-lint.md)
 - [0009 — Skills ship as a Claude Code plugin; products do not copy or edit them](./0009-skills-ship-as-a-plugin.md)
 - [0010 — The policy writes the PR's status; the owner reads GitHub, not the terminal](./0010-policy-writes-pr-status.md)
+- [0011 — Releases come from change notes; the workflow writes the version](./0011-release-from-change-notes.md)
 
 ## Historical
 

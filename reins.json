@@ -13,7 +13,8 @@
 			".claude-plugin/",
 			"scripts/",
 			"package.json"
-		]
+		],
+		"ignoreLinksIn": ["changes/"]
 	},
 	"policy": {
 		"gate": "validate",

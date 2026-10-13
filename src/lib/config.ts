@@ -24,7 +24,9 @@ export type HarnessConfig = {
 		 *  that live elsewhere, e.g. the harness repo's copies of its templates). */
 		ignoreLinksIn?: Array<string>
 		/** Path prefixes that ship: a change under them since origin/main needs a
-		 *  new package.json version with a `## [version]` entry in CHANGELOG.md. */
+		 *  change note under `changes/` (first line `patch` or `minor`, then the
+		 *  changelog text) or a new package.json version with a `## [version]`
+		 *  entry in CHANGELOG.md. */
 		bumpVersionWhen?: Array<string>
 	}
 	guard?: {
