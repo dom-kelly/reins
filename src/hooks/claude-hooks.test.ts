@@ -7,6 +7,7 @@ import { expect, test, vi } from 'vitest'
 import {
 	runGateOnStopHook,
 	runNpmScript,
+	runSessionStartHook,
 	runTypecheckHook,
 	stopGateScript,
 	typecheckScript,
@@ -370,5 +371,25 @@ test('the typecheck hook runs hooks.typecheck, else typecheck, only for files it
 		await rm(path.join(elsewhere, 'repo-link'), { force: true })
 		await rm(root, { recursive: true, force: true })
 		await rm(elsewhere, { recursive: true, force: true })
+	}
+})
+
+// A session that opens on a bare clone must hear what is missing, in its
+// context (stdout), and still open: the fix is the agent's first job, not a
+// reason to refuse it.
+test('the session-start hook reports the doctor lines and never blocks', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'harness-session-start-'))
+	const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+	try {
+		expect(runSessionStartHook(root)).toBe(0)
+		const output = log.mock.calls.map((c) => c.join(' ')).join('\n')
+		expect(output).toMatch(
+			/^reins doctor: \d+ thing\(s\) to fix before starting work/,
+		)
+		expect(output).toContain('❌ node_modules installed → npm install')
+		expect(output).toContain('→ npx reins adopt')
+	} finally {
+		log.mockRestore()
+		await rm(root, { recursive: true, force: true })
 	}
 })

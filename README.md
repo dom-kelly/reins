@@ -24,7 +24,7 @@ npx reins check            # decisions, links, skills, primitives map, repo rule
 npx reins classify         # which primitives a branch touches, and the risk floor
 npx reins policy 42      # may an agent merge PR 42? the guard runs this on every gh pr merge
 npx reins policy 42 --wait   # the same, after CI and the reviews on the current head are in
-npx reins doctor
+npx reins doctor           # what a fresh session needs to know; --offline skips GitHub
 ```
 
 Products call `npx reins hook …` from `.husky/` and `.claude/settings.json`, so
@@ -70,19 +70,19 @@ and give me the exact command for each of those.
 
 ## What a product gets
 
-| Layer        | Where in the product                                   | Purpose                                                                                                                                                                            |
-| ------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Map          | `CLAUDE.md`, `AGENTS.md`                               | Short index; detail lives in focused docs                                                                                                                                          |
-| Docs         | `docs/contributing/`                                   | Intent, harness loop, shipping policy, security, testing, gotchas                                                                                                                  |
-| Veto list    | `docs/contributing/decisions/`                         | Recorded "no" decisions so agents stop re-proposing them                                                                                                                           |
-| Taxonomy     | `docs/contributing/architecture/primitives.yaml`       | Building blocks, invariants, risk floors; every source file has an owner                                                                                                           |
-| Skills       | `/reins:*` (plugin in `node_modules/@dom-kelly/reins`) | new-product, review-and-recommend, ship-pr, verify-app; harness-owned, never copied ([decision 0009](./docs/contributing/decisions/0009-skills-ship-as-a-plugin.md))               |
-| Toolchain    | `.oxlintrc.json`, `.prettierrc.json`, lint-staged      | Shared format and lint; the product keeps its test runner, typechecker and build ([decision 0008](./docs/contributing/decisions/0008-harness-owns-format-and-lint.md))             |
-| Gate         | `npm run validate`                                     | One local gate, identical in CI; `npx reins check` is one lane                                                                                                                     |
-| Hooks        | `.husky/`, `.claude/settings.json`                     | Git hooks: Node version, lint-staged, `reins check`, typecheck, tests on push. Claude hooks: typecheck after edits, gate before stopping; destructive git and push-to-main blocked |
-| Housekeeping | `.github/workflows/merged-branch.yml`                  | A merged PR's head branch is deleted, however it was merged; the guard requires `--delete-branch` too                                                                              |
-| Policy       | `reins.json` → `policy`                                | kody's risk tiers: who may merge, which reviewers must have spoken; the verdict is written to the PR as `needs-owner` / `agent-merges` labels, an assignee and a comment           |
-| Growth path  | `docs/contributing/growth.md`                          | What to add, and when it has earned its place                                                                                                                                      |
+| Layer        | Where in the product                                   | Purpose                                                                                                                                                                                                     |
+| ------------ | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Map          | `CLAUDE.md`, `AGENTS.md`                               | Short index; detail lives in focused docs                                                                                                                                                                   |
+| Docs         | `docs/contributing/`                                   | Intent, harness loop, shipping policy, security, testing, gotchas                                                                                                                                           |
+| Veto list    | `docs/contributing/decisions/`                         | Recorded "no" decisions so agents stop re-proposing them                                                                                                                                                    |
+| Taxonomy     | `docs/contributing/architecture/primitives.yaml`       | Building blocks, invariants, risk floors; every source file has an owner                                                                                                                                    |
+| Skills       | `/reins:*` (plugin in `node_modules/@dom-kelly/reins`) | new-product, review-and-recommend, ship-pr, verify-app; harness-owned, never copied ([decision 0009](./docs/contributing/decisions/0009-skills-ship-as-a-plugin.md))                                        |
+| Toolchain    | `.oxlintrc.json`, `.prettierrc.json`, lint-staged      | Shared format and lint; the product keeps its test runner, typechecker and build ([decision 0008](./docs/contributing/decisions/0008-harness-owns-format-and-lint.md))                                      |
+| Gate         | `npm run validate`                                     | One local gate, identical in CI; `npx reins check` is one lane                                                                                                                                              |
+| Hooks        | `.husky/`, `.claude/settings.json`                     | Git hooks: Node version, lint-staged, `reins check`, typecheck, tests on push. Claude hooks: doctor at session start, typecheck after edits, gate before stopping; destructive git and push-to-main blocked |
+| Housekeeping | `.github/workflows/merged-branch.yml`                  | A merged PR's head branch is deleted, however it was merged; the guard requires `--delete-branch` too                                                                                                       |
+| Policy       | `reins.json` → `policy`                                | kody's risk tiers: who may merge, which reviewers must have spoken; the verdict is written to the PR as `needs-owner` / `agent-merges` labels, an assignee and a comment                                    |
+| Growth path  | `docs/contributing/growth.md`                          | What to add, and when it has earned its place                                                                                                                                                               |
 
 `templates/manifest.json` says which of these are **managed** (kept in sync),
 which are **owned** by the product after the first write, and which are

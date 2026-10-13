@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
+import { doctor, formatDoctor } from '../cli/doctor.ts'
 import { nodeVersionIssue } from '../checks/node-version.ts'
 import { readConfig, type HarnessConfig } from '../lib/config.ts'
 
@@ -272,4 +273,23 @@ export function runGateOnStopHook(
 			: `${output.trim()} Tell the user; it cannot be fixed from inside the session.`,
 	)
 	return 2
+}
+
+/** SessionStart: the offline doctor lines, so a session that opens on a
+ *  clone with no `node_modules`, the wrong Node or an overdue sync hears it
+ *  before doing anything. Stdout joins the agent's context; the exit is
+ *  always 0, because a red line is something to fix, not a reason to refuse
+ *  the session. The GitHub lines are left to `npx reins doctor` by hand. */
+export function runSessionStartHook(root: string) {
+	const items = doctor(root, { offline: true })
+	const red = items.filter((i) => !i.ok && !i.info)
+	console.log(
+		[
+			red.length
+				? `reins doctor: ${red.length} thing(s) to fix before starting work (npx reins doctor adds the GitHub checks)`
+				: 'reins doctor: the harness is ready (npx reins doctor adds the GitHub checks)',
+			formatDoctor(items),
+		].join('\n'),
+	)
+	return 0
 }

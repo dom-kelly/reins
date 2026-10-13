@@ -97,6 +97,13 @@ place are in [growth.md](./growth.md).
   after the workspace trust dialog, not in cloud or headless sessions; run
   `/reload-plugins` after `npm update`.
 
+- A SessionStart hook runs `reins doctor --offline`
+  (`npx reins hook session-start`) and puts its lines in the agent's context, so
+  a session that opens on a clone with no `node_modules`, the wrong Node or an
+  overdue sync is told at once what to fix. It never blocks (the fix is the
+  session's first job) and skips the GitHub lookups, which `npx reins doctor` by
+  hand adds.
+
 - A PreToolUse hook on Bash, the harness guard (`npx reins hook guard-bash`),
   refuses force-pushes (`--force`, `-f`, `--force-with-lease`), a push to `main`
   or `master`, `--no-verify` on commit or push, `git reset --hard` and

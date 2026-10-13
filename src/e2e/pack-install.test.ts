@@ -59,7 +59,7 @@ test('a product built from the packed package passes its own validate', async ()
 			readFileSync(path.join(product, '.claude/settings.json'), 'utf8'),
 		) as {
 			hooks: Record<
-				'PreToolUse' | 'PostToolUse',
+				'PreToolUse' | 'PostToolUse' | 'SessionStart',
 				Array<{ hooks: Array<{ command: string }> }>
 			>
 		}
@@ -67,6 +67,14 @@ test('a product built from the packed package passes its own validate', async ()
 		const uninstalled = runGuard(guardCommand, product, dir)
 		expect(uninstalled.status, uninstalled.stderr).toBe(2)
 		expect(uninstalled.stderr).toContain('the harness guard did not run')
+		// The SessionStart hook instead opens the session and says what to
+		// run, on stdout, where the agent reads it.
+		const startCommand = settings.hooks.SessionStart[0]!.hooks[0]!.command
+		const unstarted = runGuard(startCommand, product, dir)
+		expect(unstarted.status, unstarted.stderr).toBe(0)
+		expect(unstarted.stdout).toContain(
+			'the harness session-start hook did not run',
+		)
 
 		const pkgFile = path.join(product, 'package.json')
 		const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'))
@@ -75,6 +83,13 @@ test('a product built from the packed package passes its own validate', async ()
 
 		const install = run('npm', ['install', '--no-audit', '--no-fund'], product)
 		expect(install.code, install.out).toBe(0)
+		// Installed, the same command runs the product's own copy and reports.
+		const started = runGuard(startCommand, product, dir)
+		expect(started.status, started.stderr).toBe(0)
+		expect(started.stdout).toContain('reins doctor:')
+		expect(started.stdout).toContain(
+			"✅ reins installed in this repo's node_modules",
+		)
 
 		// The skills travel with the package and load in place from here
 		// (decision 0009), so `files` must pack the plugin and its marketplace.
