@@ -4,6 +4,18 @@ Releases are git tags (`v<version>`), cut by the release workflow when main's
 `package.json` version has no tag yet. Products pin a range on them
 ([decision 0007](./docs/contributing/decisions/0007-versioned-by-tag.md)).
 
+## [0.4.3] - 2026-10-13
+
+- Every file reins writes into a product now opens with two lines saying what
+  sync will do to it: `reins: managed` (edit freely; sync merges harness updates
+  in and keeps the edits) or `reins: owned` (written once, never changed again).
+  The JSON configs and `.nvmrc` have no comment syntax and the decision template
+  is copied into records the product owns, so those go without; the product's
+  `getting-started.md` gains a "What reins manages" section listing every file
+  by kind, plus what is never to be edited (`.reins/base/`, the installed
+  package), and `CLAUDE.md` links it. Tests keep the headers and the list in
+  step with `templates/manifest.json`.
+
 ## [0.4.2] - 2026-10-12
 
 - The Claude hooks (`typecheck`, `validate-on-stop`) run the product's scripts

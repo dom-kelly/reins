@@ -1,3 +1,6 @@
+<!-- reins: owned. Written once as a starting point; sync never changes it again,
+     so make it yours. What reins touches: docs/contributing/getting-started.md -->
+
 # Gotchas
 
 Real mistakes and their fixes, one line each. Add a line when an agent gets

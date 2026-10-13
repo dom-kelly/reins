@@ -1,3 +1,6 @@
+<!-- reins: owned. Written once as a starting point; sync never changes it again,
+     so make it yours. What reins touches: docs/contributing/getting-started.md -->
+
 # Architecture
 
 How the system is shaped. Keep this page short and link to one doc per primitive

@@ -88,6 +88,9 @@ and give me the exact command for each of those.
 which are **owned** by the product after the first write, and which are
 **retired** (once managed, now deleted by sync)
 ([decision 0004](./docs/contributing/decisions/0004-harness-is-a-cli-package.md)).
+Each file says so on its first line, and the product's
+`docs/contributing/getting-started.md` lists them all, with what is never to be
+edited (`.reins/base/`, the installed package).
 
 ## Develop it
 

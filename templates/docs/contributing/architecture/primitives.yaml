@@ -1,3 +1,5 @@
+# reins: owned. Written once as a starting point; sync never changes it again,
+# so make it yours. What reins touches: docs/contributing/getting-started.md
 # Stable taxonomy of system building blocks. See architecture/index.md.
 # Risk labels in PRs:
 #   composes - wires existing primitives without changing them (low)

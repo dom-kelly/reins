@@ -1,3 +1,6 @@
+<!-- reins: managed. Edit freely: `npx reins sync` merges harness updates in and
+     keeps your edits. What reins touches: docs/contributing/getting-started.md -->
+
 # Agent index
 
 <!-- Replace this line with one sentence on what the product is. Keep the full
@@ -27,6 +30,9 @@ all up front.
   [gotchas.md](./docs/contributing/gotchas.md)
 - Contributor docs map (setup, services, style, testing, docs principles):
   [docs/contributing/index.md](./docs/contributing/index.md)
+- Which files reins keeps in sync, which it wrote once, and which are not yours
+  to edit:
+  [getting-started.md](./docs/contributing/getting-started.md#what-reins-manages)
 
 ## Skills
 

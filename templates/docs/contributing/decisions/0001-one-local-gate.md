@@ -1,3 +1,6 @@
+<!-- reins: owned. Written once as a starting point; sync never changes it again,
+     so make it yours. What reins touches: docs/contributing/getting-started.md -->
+
 # 0001: One local gate; no CI-only checks
 
 - **Status:** accepted

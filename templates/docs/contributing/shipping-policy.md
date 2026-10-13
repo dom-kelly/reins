@@ -1,3 +1,6 @@
+<!-- reins: managed. Edit freely: `npx reins sync` merges harness updates in and
+     keeps your edits. What reins touches: docs/contributing/getting-started.md -->
+
 # Shipping policy
 
 Merging to `main` is the moment a change reaches everyone (and, in a deployed

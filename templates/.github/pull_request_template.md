@@ -1,3 +1,6 @@
+<!-- reins: managed. Edit freely: `npx reins sync` merges harness updates in and
+     keeps your edits. What reins touches: docs/contributing/getting-started.md -->
+
 ## Intent
 
 <!-- The goal of this change: what it is for, not how it works. -->

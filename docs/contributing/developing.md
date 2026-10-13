@@ -55,7 +55,10 @@ skill's name (`reins check` refuses it,
    are synced into products (three-way merge); owned files are written once and
    never touched again; a file the harness stops shipping moves to `retired`,
    and sync deletes a product's copy when it still matches its `.reins/base/`
-   record (an edited copy is reported, never deleted).
+   record (an edited copy is reported, never deleted). Open the file with the
+   managed or owned header its neighbours carry (a test checks it; JSON files,
+   `.nvmrc` and the decision template go without) and add it to the list in
+   `templates/docs/contributing/getting-started.md`.
 3. `npm run validate`. The CLI tests (`src/cli/cli.test.ts`) create a product in
    a temp dir and run every check against it, so a template that breaks a
    product fails here.

@@ -1,3 +1,6 @@
+<!-- reins: managed. Edit freely: `npx reins sync` merges harness updates in and
+     keeps your edits. What reins touches: docs/contributing/getting-started.md -->
+
 # Growth path
 
 Pieces of a full kody-style harness that this template leaves out on purpose

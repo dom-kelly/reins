@@ -1,3 +1,6 @@
+<!-- reins: managed. Edit freely: `npx reins sync` merges harness updates in and
+     keeps your edits. What reins touches: docs/contributing/getting-started.md -->
+
 # Testing principles
 
 Tests exist to catch regressions in behavior users or callers depend on. Pick
