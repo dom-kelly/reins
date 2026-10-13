@@ -1188,3 +1188,39 @@ it('body fields and PR numbers parse exactly', () => {
 	).toBe('my-branch')
 	expect(prRefFromCommand('gh pr merge --match-head-commit abc 12')).toBe('12')
 })
+
+// A stale branch is refused with the fix in the message, so the agent in
+// `--wait` acts on it instead of finding out from a failed `gh pr merge`.
+describe('merge policy: a stale branch', () => {
+	it('refuses a conflicting branch and says to merge main in', () => {
+		const res = policy({
+			FILES: 'modified:docs/x.md',
+			MERGEABLE: 'CONFLICTING',
+		})
+		expect(res.allowed).toBe(false)
+		expect(res.status).toBe(2)
+		expect(res.message).toMatch(
+			/PR #7 conflicts with main: merge main into the branch, resolve, push/,
+		)
+	})
+	it('waits while GitHub is still computing mergeability', () => {
+		const res = policy({ FILES: 'modified:docs/x.md', MERGEABLE: 'UNKNOWN' })
+		expect(res.allowed).toBe(false)
+		expect(res.message).toMatch(/waiting for GitHub to work out whether PR #7/)
+	})
+	it('refuses a branch the repo requires up to date', () => {
+		const res = policy({ FILES: 'modified:docs/x.md', MERGE_STATE: 'BEHIND' })
+		expect(res.allowed).toBe(false)
+		expect(res.message).toMatch(
+			/PR #7 is behind main .* merge main into the branch, push/,
+		)
+	})
+	it('reads nothing into the other merge states', () => {
+		for (const MERGE_STATE of ['CLEAN', 'BLOCKED', 'UNSTABLE', 'HAS_HOOKS']) {
+			expect(
+				policy({ FILES: 'modified:docs/x.md', MERGE_STATE }).allowed,
+				MERGE_STATE,
+			).toBe(true)
+		}
+	})
+})

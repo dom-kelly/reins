@@ -207,6 +207,12 @@ type PullRequest = {
 	baseRefName: string
 	headRefOid: string
 	body: string
+	/** MERGEABLE, CONFLICTING, or UNKNOWN while GitHub is still computing it
+	 *  after a push. */
+	mergeable?: string
+	/** BEHIND only when the repo requires the branch up to date and it is not;
+	 *  CLEAN, BLOCKED, UNSTABLE, DIRTY and the rest are read elsewhere. */
+	mergeStateStatus?: string
 	statusCheckRollup: Array<{
 		name?: string
 		context?: string
@@ -458,7 +464,7 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 					'view',
 					pr,
 					'--json',
-					'isDraft,baseRefName,headRefOid,body,statusCheckRollup',
+					'isDraft,baseRefName,headRefOid,body,statusCheckRollup,mergeable,mergeStateStatus',
 				],
 				root,
 			),
@@ -500,6 +506,19 @@ export function evaluateMerge(root: string, prRef?: string): Verdict {
 	]
 	if (info.isDraft) return no(`PR #${pr} is a draft`)
 	if (info.baseRefName !== 'main') return no(`PR #${pr} doesn't target main`)
+	// A stale branch is the agent's to fix, now, not something to discover
+	// when `gh pr merge` fails: merge main in (the guard refuses a force push,
+	// so not a rebase), resolve, push, and the loop runs again on the new head.
+	if (info.mergeable === 'CONFLICTING')
+		return no(
+			`PR #${pr} conflicts with main: merge main into the branch, resolve, push`,
+		)
+	if (info.mergeable === 'UNKNOWN')
+		return wait(`GitHub to work out whether PR #${pr} merges cleanly`)
+	if (info.mergeStateStatus === 'BEHIND')
+		return no(
+			`PR #${pr} is behind main and this repo requires it up to date: merge main into the branch, push`,
+		)
 
 	// Tests may be added or changed, never removed — nor renamed into something else.
 	const removedTests = files.filter(
