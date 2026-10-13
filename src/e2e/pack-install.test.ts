@@ -59,7 +59,7 @@ test('a product built from the packed package passes its own validate', async ()
 			readFileSync(path.join(product, '.claude/settings.json'), 'utf8'),
 		) as {
 			hooks: Record<
-				'PreToolUse' | 'SessionStart',
+				'PreToolUse' | 'PostToolUse' | 'SessionStart',
 				Array<{ hooks: Array<{ command: string }> }>
 			>
 		}
@@ -160,6 +160,26 @@ test('a product built from the packed package passes its own validate', async ()
 		expect(installed.status, installed.stderr).toBe(2)
 		expect(installed.stderr).toContain('Pushing straight to main')
 		expect(installed.stderr).not.toContain('did not run')
+
+		// The typecheck hook the same way, with npm's prefix outside nvm as it
+		// is when the session's Node is not nvm's: the product's typecheck must
+		// run and pass, not be skipped or refused. The Node running this test
+		// matches the product's .nvmrc, so it is used as is; the switch to
+		// another is unit-tested.
+		const typecheckCommand = settings.hooks.PostToolUse[0]!.hooks[0]!.command
+		const edited = (await readdir(path.join(product, 'src'))).find((f) =>
+			f.endsWith('.ts'),
+		)!
+		const typecheck = spawnSync('sh', ['-c', typecheckCommand], {
+			cwd: product,
+			encoding: 'utf8',
+			input: JSON.stringify({
+				tool_input: { file_path: path.join(product, 'src', edited) },
+			}),
+			env: { ...process.env, npm_config_prefix: dir },
+		})
+		expect(typecheck.status, `${typecheck.stdout}\n${typecheck.stderr}`).toBe(0)
+		expect(typecheck.stdout).toBe('')
 	} finally {
 		await rm(dir, { recursive: true, force: true })
 	}

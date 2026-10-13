@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { existsSync, readdirSync } from 'node:fs'
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
 import { expect, test, vi } from 'vitest'
 import {
@@ -31,6 +32,134 @@ test('an npm script run by a hook does not inherit GIT_DIR', async () => {
 	} finally {
 		if (saved === undefined) delete process.env.GIT_DIR
 		else process.env.GIT_DIR = saved
+		await rm(root, { recursive: true, force: true })
+	}
+})
+
+const nvmDir = path.resolve(process.env.NVM_DIR ?? path.join(homedir(), '.nvm'))
+const nvmInstalled = existsSync(path.join(nvmDir, 'nvm.sh'))
+const major = process.versions.node.split('.')[0]!
+/** Whether nvm can select this test's own major (CI gets Node from
+ *  setup-node, with nvm present but empty). */
+const nvmHasMajor =
+	nvmInstalled &&
+	existsSync(path.join(nvmDir, 'versions/node')) &&
+	readdirSync(path.join(nvmDir, 'versions/node')).some((v) =>
+		v.startsWith(`v${major}.`),
+	)
+
+/** Runs `fn` with these variables set in process.env (undefined = unset),
+ *  restoring the originals afterwards. */
+async function withEnv(
+	vars: Record<string, string | undefined>,
+	fn: () => Promise<void>,
+) {
+	const saved = Object.fromEntries(
+		Object.keys(vars).map((k) => [k, process.env[k]]),
+	)
+	for (const [k, v] of Object.entries(vars))
+		if (v === undefined) delete process.env[k]
+		else process.env[k] = v
+	try {
+		await fn()
+	} finally {
+		for (const [k, v] of Object.entries(saved))
+			if (v === undefined) delete process.env[k]
+			else process.env[k] = v
+	}
+}
+
+// Claude Code runs the hooks through `npx reins hook …`, and npm exports its
+// config to what it runs: the hook arrives with npm_config_prefix set to the
+// prefix of whatever Node ran npx. When that Node is not nvm's (Homebrew's,
+// say), nvm refuses to switch and, before this test, the hook silently ran the
+// product's gate on the wrong Node (rollup: "Cannot find module
+// @rollup/rollup-darwin-x64" under an x64 Node 23 on an arm64 Mac). A `node`
+// shim first on a PATH with no nvm bin in it stands in for the hook's own Node
+// (given an nvm bin, nvm edits that entry in place instead of prepending), and
+// the version the hook believes it runs on is passed in.
+test('a hook runs the Node in .nvmrc, switching with nvm only when its own Node is wrong', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'harness-hook-nvm-'))
+	const shim = path.join(root, 'shim')
+	const prefix = path.join(root, 'prefix')
+	try {
+		await mkdir(shim)
+		await mkdir(prefix)
+		await writeFile(path.join(shim, 'node'), '#!/bin/sh\necho shim\n')
+		await chmod(path.join(shim, 'node'), 0o755)
+		// npm resolves from the same PATH, which may hold no other npm (a
+		// machine with Node from nvm only): this test's own, whose `env node`
+		// shebang still lands on the shim.
+		await symlink(
+			path.join(path.dirname(process.execPath), 'npm'),
+			path.join(shim, 'npm'),
+		)
+		await writeFile(
+			path.join(root, 'package.json'),
+			JSON.stringify({ scripts: { show: 'node -p process.version' } }),
+		)
+		const pathWithoutNvm = (process.env.PATH ?? '')
+			.split(path.delimiter)
+			.filter((dir) => !dir.startsWith(`${nvmDir}${path.sep}`))
+		await withEnv(
+			{
+				npm_config_prefix: prefix,
+				NVM_BIN: undefined,
+				NVM_INC: undefined,
+				PATH: [shim, ...pathWithoutNvm].join(path.delimiter),
+			},
+			async () => {
+				// No .nvmrc: nothing to match, the hook's Node (the shim) runs
+				// (npm's own shebang resolves to it, so "shim" is npm's output).
+				let run = runNpmScript(root, 'show')
+				expect(run.status, run.output).toBe(0)
+				expect(run.output).toContain('shim')
+
+				// The hook's Node matches: used as is, nvm not consulted (CI has
+				// nvm but no Node in it; a matching setup-node Node must do).
+				await writeFile(path.join(root, '.nvmrc'), `${major}\n`)
+				run = runNpmScript(root, 'show')
+				expect(run.status, run.output).toBe(0)
+				expect(run.output).toContain('shim')
+
+				// The hook's Node is wrong: nvm selects the one in .nvmrc despite
+				// the foreign prefix (main's code printed "shim" here), or says
+				// why it cannot.
+				run = runNpmScript(root, 'show', '1.0.0')
+				if (nvmHasMajor) {
+					expect(run.status, run.output).toBe(0)
+					expect(run.ran).toBe(true)
+					expect(run.output).toContain(`v${major}.`)
+				} else {
+					expect(run.status, run.output).toBe(2)
+					expect(run.ran).toBe(false)
+					expect(run.output).toMatch(
+						/^npm run show did not run: node \d+ .* have 1\.0\.0\. The hooks run on the Node Claude Code was started with/,
+					)
+					if (nvmInstalled)
+						expect(run.output).toContain('nvm could not select it')
+				}
+				expect(run.output).not.toContain('shim')
+
+				// An .nvmrc only nvm can read (an alias): no version is claimed, so
+				// the hook's Node is used as is rather than refused with NaN.
+				await writeFile(path.join(root, '.nvmrc'), 'lts/*\n')
+				run = runNpmScript(root, 'show', '1.0.0')
+				expect(run.status, run.output).toBe(0)
+				expect(run.output).toContain('shim')
+
+				// A Node nothing can supply: the script does not run on the shim.
+				await writeFile(path.join(root, '.nvmrc'), '999\n')
+				run = runNpmScript(root, 'show', '1.0.0')
+				expect(run.status, run.output).toBe(2)
+				expect(run.ran).toBe(false)
+				expect(run.output).toMatch(
+					/^npm run show did not run: node 999 .* have 1\.0\.0\./,
+				)
+				expect(run.output).not.toContain('shim')
+			},
+		)
+	} finally {
 		await rm(root, { recursive: true, force: true })
 	}
 })
