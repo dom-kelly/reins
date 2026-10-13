@@ -1,3 +1,6 @@
+<!-- reins: managed. Edit freely: `npx reins sync` merges harness updates in and
+     keeps your edits. What reins touches: docs/contributing/getting-started.md -->
+
 # Code style
 
 Formatting and lint are mechanical (`npm run validate:fix`). This page covers

@@ -1,3 +1,6 @@
+<!-- reins: managed. Edit freely: `npx reins sync` merges harness updates in and
+     keeps your edits. What reins touches: docs/contributing/getting-started.md -->
+
 # Contributor docs
 
 Focused docs, one topic each. [CLAUDE.md](../../CLAUDE.md) links the important

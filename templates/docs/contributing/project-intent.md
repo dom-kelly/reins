@@ -1,3 +1,6 @@
+<!-- reins: owned. Written once as a starting point; sync never changes it again,
+     so make it yours. What reins touches: docs/contributing/getting-started.md -->
+
 # Project intent
 
 Fill this in with `/reins:new-product` before writing product code. Agents read

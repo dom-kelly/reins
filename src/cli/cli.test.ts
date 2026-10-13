@@ -469,8 +469,81 @@ test('every template is in the manifest exactly once, and every entry exists', a
 	expect(retired.length).toBeGreaterThan(0)
 })
 
+// A product's reader learns from a file's first line whether sync will merge
+// into it (managed) or leave it alone (owned). Files with no comment syntax,
+// and the decision template (copied into records the product owns), have no
+// header; the table in getting-started.md covers them.
+const headerLines = {
+	managed: [
+		'reins: managed. Edit freely: `npx reins sync` merges harness updates in and',
+		'keeps your edits. What reins touches: docs/contributing/getting-started.md',
+	],
+	owned: [
+		'reins: owned. Written once as a starting point; sync never changes it again,',
+		'so make it yours. What reins touches: docs/contributing/getting-started.md',
+	],
+}
+const noHeader = new Set([
+	'.nvmrc',
+	'docs/contributing/decisions/0000-template.md',
+])
+function templateHeader(kind: keyof typeof headerLines, rel: string) {
+	const [first, second] = headerLines[kind]
+	return rel.endsWith('.md')
+		? `<!-- ${first}\n     ${second} -->\n\n`
+		: `# ${first}\n# ${second}\n`
+}
+
+test('every template opens by saying whether reins manages or owns it', async () => {
+	const { managed, owned } = loadManifest()
+	for (const [kind, files] of [
+		['managed', managed],
+		['owned', owned],
+	] as const) {
+		for (const rel of files) {
+			const text = await readFile(
+				path.join(packageRoot, 'templates', rel),
+				'utf8',
+			)
+			if (rel.endsWith('.json') || noHeader.has(rel)) {
+				expect(text, rel).not.toContain('reins: ')
+			} else {
+				expect(text.startsWith(templateHeader(kind, rel)), rel).toBe(true)
+			}
+		}
+	}
+})
+
+const named = (part: string) =>
+	[...part.matchAll(/`([^`]+)`/g)].map((m) => m[1])
+
+test('getting-started lists every file reins writes under its kind', async () => {
+	const text = await readFile(
+		path.join(packageRoot, 'templates/docs/contributing/getting-started.md'),
+		'utf8',
+	)
+	const section = text.split('## What reins manages')[1]?.split('\n## ')[0]
+	expect(section, 'section heading').toBeDefined()
+	const [, managedPart, ownedPart] = section!.split(
+		/\*\*(?:Managed|Owned|Not yours to edit)\*\*/,
+	)
+	expect(managedPart, '**Managed** paragraph').toBeDefined()
+	expect(ownedPart, '**Owned** paragraph').toBeDefined()
+	const { managed, owned, retired = [] } = loadManifest()
+	const inManaged = named(managedPart!)
+	const inOwned = named(ownedPart!)
+	expect(inManaged).toEqual(expect.arrayContaining(managed))
+	expect(inOwned).toEqual(expect.arrayContaining(owned))
+	// A path under both headings would be as misleading as one under neither.
+	for (const rel of owned) expect(inManaged, rel).not.toContain(rel)
+	for (const rel of managed) expect(inOwned, rel).not.toContain(rel)
+	for (const rel of retired) expect(section).not.toContain(`\`${rel}\``)
+})
+
 // The workflow is dogfooded by copy; validate.yml differs on
 // purpose (the harness clones no git dependency), so it is not compared.
+// The copy keeps the `reins: managed` header although nothing syncs this
+// repo (decision 0004): a byte-identical copy is the simpler rule.
 test('the merged-branch workflow is the same file the harness ships', async () => {
 	const rel = '.github/workflows/merged-branch.yml'
 	expect(
@@ -536,7 +609,8 @@ test('every `npx reins hook` a template ships carries --no-install', async () =>
 		expect(
 			await readFile(path.join(packageRoot, 'templates/.husky', hook), 'utf8'),
 		).toBe(
-			`npx --no-install reins hook ${hook} || { [ -x node_modules/.bin/reins ] || echo 'reins is not installed: run npm install' >&2; exit 1; }\n`,
+			templateHeader('managed', hook) +
+				`npx --no-install reins hook ${hook} || { [ -x node_modules/.bin/reins ] || echo 'reins is not installed: run npm install' >&2; exit 1; }\n`,
 		)
 	}
 	// Prose may name the command; anything that runs it must not install it.

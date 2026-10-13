@@ -1,1 +1,3 @@
+# reins: managed. Edit freely: `npx reins sync` merges harness updates in and
+# keeps your edits. What reins touches: docs/contributing/getting-started.md
 npx --no-install reins hook pre-push || { [ -x node_modules/.bin/reins ] || echo 'reins is not installed: run npm install' >&2; exit 1; }
